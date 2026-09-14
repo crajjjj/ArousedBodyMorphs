@@ -12,8 +12,18 @@ namespace ABM::Events
 		// (same pattern OSL Aroused uses for its AND refresh bursts).
 		std::atomic<bool> g_sweepPending{ false };
 
-		std::condition_variable g_pollCv;
-		std::mutex              g_pollMutex;
+		// Coalesce player equip refreshes the same way: a redress fires one
+		// TESEquipEvent per item in the same frame(s); one queued task
+		// re-reads the final worn state, so the rest add nothing.
+		std::atomic<bool> g_equipRefreshPending{ false };
+
+		// condition_variable_any so the jthread's stop_token can interrupt
+		// the wait -- a plain condition_variable never sees the stop request,
+		// which would leave the destructor's join blocked for the remainder
+		// of the interval (user-settable up to 60s) at shutdown.
+		std::condition_variable_any g_pollCv;
+		std::mutex                  g_pollMutex;
+		bool                        g_configDirty = false;  // guarded by g_pollMutex
 
 		void UpdatePlayerTask()
 		{
@@ -26,7 +36,9 @@ namespace ABM::Events
 
 		// Player + every high-processed NPC within scanRadius. Actor filters
 		// (sex/dead/creature) live in MorphApplier::UpdateActor, so this only
-		// bounds the sweep spatially. Main thread only.
+		// bounds the sweep spatially; UpdateActor's unchanged-value probe then
+		// skips the write for actors already at their target values -- in
+		// particular every never-aroused bystander. Main thread only.
 		void SweepNearby()
 		{
 			auto player = RE::PlayerCharacter::GetSingleton();
@@ -131,9 +143,18 @@ namespace ABM::Events
 				if (!form || !form->As<RE::TESObjectARMO>()) {
 					return RE::BSEventNotifyControl::kContinue;
 				}
-				// Snap to the new covered/bare state. TODO: reproduce the
-				// Papyrus ~1s reveal ease for the unequip direction.
-				UpdatePlayerTask();
+				// Snap to the new covered/bare state; the queued task reads
+				// the final worn state, so an outfit-swap burst collapses to
+				// one refresh. TODO: reproduce the Papyrus ~1s reveal ease
+				// for the unequip direction.
+				if (!g_equipRefreshPending.exchange(true)) {
+					SKSE::GetTaskInterface()->AddTask([]() {
+						g_equipRefreshPending.store(false);
+						if (auto player = RE::PlayerCharacter::GetSingleton()) {
+							MorphApplier::UpdateActor(player);
+						}
+					});
+				}
 				return RE::BSEventNotifyControl::kContinue;
 			}
 		};
@@ -146,11 +167,14 @@ namespace ABM::Events
 				const bool active = Backend::GetKind() == Backend::Kind::kSlaNg &&
 				                    cfg->pushed && cfg->modEnabled && cfg->pollInterval > 0.0f;
 				// Idle wakeup cadence while inactive; the pushed interval while
-				// active. NotifyConfigChanged() interrupts either wait.
+				// active. Wakes early on a config push (g_configDirty, set +
+				// notified under the mutex so the wakeup can't be lost) or on
+				// the jthread's stop request at shutdown.
 				const auto wait = active ?
 					std::chrono::milliseconds(static_cast<long long>(cfg->pollInterval * 1000.0f)) :
 					std::chrono::milliseconds(2000);
-				g_pollCv.wait_for(lock, wait);
+				g_pollCv.wait_for(lock, stop, wait, [] { return g_configDirty; });
+				g_configDirty = false;
 				if (stop.stop_requested()) {
 					return;
 				}
@@ -188,6 +212,10 @@ namespace ABM::Events
 
 	void NotifyConfigChanged()
 	{
+		{
+			std::lock_guard lock(g_pollMutex);
+			g_configDirty = true;
+		}
 		g_pollCv.notify_all();
 	}
 }

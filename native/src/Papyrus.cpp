@@ -30,12 +30,16 @@ namespace ABM::Papyrus
 
 		int32_t UpdateActor(RE::StaticFunctionTag*, RE::Actor* who)
 		{
-			return MorphApplier::UpdateActor(who);
+			// Papyrus natives run on the VM thread: evaluate inline (so the
+			// caller gets the arousal / skip code), defer the SKEE geometry
+			// work to the main thread -- ApplyBodyMorphs off-thread races the
+			// renderer.
+			return MorphApplier::UpdateActorDeferred(who);
 		}
 
 		void ClearActorMorphs(RE::StaticFunctionTag*, RE::Actor* who)
 		{
-			MorphApplier::ClearActor(who);
+			MorphApplier::ClearActorDeferred(who);
 		}
 
 		void PushConfig(RE::StaticFunctionTag*,

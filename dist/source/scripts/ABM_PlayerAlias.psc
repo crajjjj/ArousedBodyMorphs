@@ -38,6 +38,25 @@ Int tweenGen = 0
 ; not a second, independently-read one.
 Int PlayerLastArousal = 0
 
+; Generation counter for RefreshOnArmorChange: a redress fires one equip event
+; per item and the handlers serialize on this script, each paying the 0.3s AND
+; settle -- bumping this on entry lets every stale queued handler bail after
+; its wait, so only the newest event does the refresh.
+Int armorGen = 0
+
+; NativeActive() resolved once per load. Both inputs (DLL registered with
+; SKSE, backend+SKEE detected at kDataLoaded) can only change with a game
+; restart, so paying two native calls per actor per sweep to re-ask was pure
+; waste. Refreshed in OnPlayerLoadGame via ResolveNativeMode().
+Bool nativeMode = false
+
+; ActorTypeNPC keyword (Skyrim.esm), resolved per load in
+; ResolveNudityDetection. A race without it is an engine-level creature --
+; this is the creature test for the beast filters. ActorBase.GetSex() only
+; returns -1/0/1 (None/Male/Female; see the game's own ActorBase.psc), it
+; does NOT encode creature-ness.
+Keyword kwActorTypeNPC
+
 Event OnInit()
 	{Fires once when the alias is first filled. Warm the sla_Framework cache
 	 eagerly so the manual OnPlayerLoadGame call from Quest.OnInit (and every
@@ -53,8 +72,18 @@ Bool Function NativeActive()
 	 per-actor refreshes, the player poll, armor-change refreshes, morph writes
 	 -- and every Papyrus pipeline path here stands down. Without the DLL (or on
 	 a legacy Papyrus-only SLA fork) this is false and nothing changes.
-	 && short-circuits, so the native call is never made when the DLL is absent.}
-	Return ABM_Native.IsInstalled() && ABM_Native.IsActive()
+	 Cached per load (ResolveNativeMode): called once per actor in every sweep,
+	 and the answer can only change with a game restart.}
+	Return nativeMode
+EndFunction
+
+Function ResolveNativeMode()
+	{The actual DLL probe behind NativeActive(). Two native calls; the &&
+	 short-circuits, so ABM_Native.IsActive (unbound without the DLL) is never
+	 reached when the DLL is absent. Called from OnPlayerLoadGame -- which
+	 ResetAllState also routes through -- so the cache refreshes on every load
+	 and on first install.}
+	nativeMode = ABM_Native.IsInstalled() && ABM_Native.IsActive()
 EndFunction
 
 Function PushConfigToNative()
@@ -109,6 +138,12 @@ Event OnPlayerLoadGame()
 	; property is still valid (normal case) this is a no-op; if SLA was
 	; reinstalled with different formIDs it'll re-populate via the fallback.
 	GetFramework()
+
+	; Refresh the cached NativeActive() answer -- DLL install/uninstall needs a
+	; game restart, so once per load is exactly often enough. Done before the
+	; abort paths below so the armor-change handlers see the right mode even
+	; when requirements fail.
+	ResolveNativeMode()
 
 	if MainQuest.DebugMode
 		debug.Notification("Aroused BodyMorphs: checking for requirements")
@@ -321,8 +356,16 @@ EndFunction
 Function ClearActorMorphs(Actor who)
 	{Drop every morph registered under our NIO key for this actor and push the model
 	 update. Only our key is touched, so morphs owned by other mods (or the user's
-	 own RaceMenu sliders) survive untouched.}
+	 own RaceMenu sliders) survive untouched.
+
+	 In native mode the clear goes through the DLL, so the whole write path stays
+	 on one side of the fence (and on the main thread) rather than half of it
+	 reaching into SKEE from the VM.}
 	If !who
+		return
+	EndIf
+	If NativeActive()
+		ABM_Native.ClearActorMorphs(who)
 		return
 	EndIf
 	NiOverride.ClearBodyMorphKeys(who, NIO_KEY)
@@ -414,6 +457,7 @@ Function ResolveNudityDetection()
 	EndIf
 	kwArmorCuirass = Keyword.GetKeyword("ArmorCuirass")
 	kwClothingBody = Keyword.GetKeyword("ClothingBody")
+	kwActorTypeNPC = Keyword.GetKeyword("ActorTypeNPC")
 EndFunction
 
 Bool Function IsTopCovered(Actor who)
@@ -485,8 +529,18 @@ Function RefreshOnArmorChange(Form akBaseObject, Bool wasRemoved)
 		; Without AND, only body-slot (32) armor can change the covered state.
 		return
 	EndIf
+	; Debounce: a redress fires one equip event per item, and Utility.Wait
+	; unlocks the script, so the queued handlers overlap here. Claim the
+	; refresh; any newer armor event bumps armorGen, and every superseded
+	; handler bails after its wait instead of stacking N identical
+	; UpdateActor passes -- the newest event sees the final worn state.
+	armorGen += 1
+	Int myGen = armorGen
 	If AND_Resolved
 		Utility.Wait(0.3)  ; let AND update its nudity factions first
+		If myGen != armorGen
+			return
+		EndIf
 	EndIf
 
 	If wasRemoved && !IsTopCovered(Game.GetPlayer())
@@ -551,7 +605,8 @@ endEvent
 Bool Function UpdateActor(Actor who, bool doDebug=false)
 	{Set morphs of "who" according to their arousal.
 
-	 Returns true when morphs were actually written, false on every bail-out
+	 Returns true when the actor's morphs now reflect their arousal (written, or
+	 verified already at the target values and skipped), false on every bail-out
 	 (null actor, no ActorBase, excluded by an Ignore filter, no SLA framework).
 	 Callers that just want the side effect can discard it; PokePlayerArousal
 	 uses it so the MCM check row can't report a pass on a skipped actor.}
@@ -585,17 +640,26 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 		; mid-spawn). No way to filter by sex / IsDead without it -- skip.
 		return false
 	EndIf
-	; ActorBase.GetSex() encodes both gender and creature-ness:
-	;   0 = male NPC, 1 = female NPC, 2 = male creature, 3 = female creature.
-	; This lets us split the "Ignore Males" (humanoid) and "Ignore Beast"
-	; (creature) filters without needing a keyword lookup.
+	; ActorBase.GetSex() returns -1 None / 0 Male / 1 Female -- and nothing
+	; else (see the game's own ActorBase.psc; the old 2/3-for-creatures scheme
+	; this filter once tested for does not exist, which made the beast toggles
+	; dead code and let female creatures through every filter). Creature-ness
+	; comes from the race instead: no ActorTypeNPC keyword = engine-level
+	; creature. Same split the native DLL uses, so both modes now agree.
+	; Sex -1 (None) is treated as male, matching the DLL's kFemale test.
 	int sex = whoBase.GetSex()
+	Bool isFemale = sex == 1
+	Bool isCreature = false
+	Race whoRace = who.GetRace()
+	If whoRace && kwActorTypeNPC
+		isCreature = !whoRace.HasKeyword(kwActorTypeNPC)
+	EndIf
 	String skipReason = ""
-	If MainQuest.IgnoreMales && sex == 0
+	If MainQuest.IgnoreMales && !isCreature && !isFemale
 		skipReason = "is male"
-	ElseIf MainQuest.IgnoreMaleBeast && sex == 2
+	ElseIf MainQuest.IgnoreMaleBeast && isCreature && !isFemale
 		skipReason = "is male beast"
-	ElseIf MainQuest.IgnoreFemaleBeast && sex == 3
+	ElseIf MainQuest.IgnoreFemaleBeast && isCreature && isFemale
 		skipReason = "is female beast"
 	ElseIf MainQuest.IgnoreDead && who.IsDead()
 		; Dead NPCs are already filtered out at the OnArousalComputed cell-scan
@@ -648,12 +712,13 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 		EndIf
 	EndIf
 
+	Bool isPlayer = who == Game.GetPlayer()
 	SetActorMorphs(who, Arousal, armorScale, doDebug)
 
 	; Track the player's last-applied scale (the reveal tween's start point) and
 	; arousal (reported by PokePlayerArousal), and cancel any in-flight tween --
 	; a direct update supersedes it.
-	If who == Game.GetPlayer()
+	If isPlayer
 		PlayerArmorScale = armorScale
 		PlayerLastArousal = Arousal
 		tweenGen += 1
@@ -668,6 +733,21 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	 imported counts up to 128. Papyrus && short-circuits, so MorphNames[j] is not
 	 read once j hits 128.
 
+	 Unchanged-value skip: arousal rarely moves between poll ticks, and the
+	 UpdateModelWeight mesh rebuild is by far the most expensive call in the mod,
+	 so re-writing identical values every tick was the dominant steady-state cost.
+	 Every slot is maxValue[j] * factor -- one shared factor -- so a single slot
+	 settles whether anything would change, and one GetBodyMorph read replaces
+	 23 writes plus the rebuild.
+
+	 The probe asks NiOverride what WE last wrote (our key only), rather than
+	 trusting a remembered value: NiOverride is then the single source of truth,
+	 so there is no cache to invalidate when the MCM retunes a slider, when a
+	 save is loaded, or if anything else clears our key -- the comparison target
+	 moves with the settings and a mismatch always rewrites. GetBodyMorph returns
+	 0.0 for an actor we never touched, so a never-aroused bystander at factor 0
+	 costs exactly one call and no rebuild.
+
 	 The ModEnabled check is here, at the single point where morphs are written,
 	 because every external call in this file unlocks the script: the MCM thread can
 	 enter SetModEnabled part-way through a tween step and clear the morphs, and
@@ -677,9 +757,30 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	EndIf
 	String[] morphNames = MainQuest.MorphNames
 	Float[]  maxValues  = MainQuest.MaxValue
+
+	; Integer division trap: arousal / 100 would truncate to 0 -- cast first.
+	Float factor = (arousal as Float) / 100.0 * scale
+
+	; Probe slot = the first morph with a non-zero max. A zero-max slot always
+	; reads 0 whatever the factor, so it could never detect a change.
+	Int p = 0
+	While p < 128 && morphNames[p] != "" && maxValues[p] == 0.0
+		p += 1
+	EndWhile
+	If p >= 128 || morphNames[p] == ""
+		; Empty table, or every max is 0 -- this table can never write anything.
+		return
+	EndIf
+	; Tolerance is 1e-6: float32 noise around these magnitudes is ~1e-8, while
+	; the smallest step a user can dial in (max 0.01, one arousal point) is
+	; 1e-4 -- two orders of margin on both sides.
+	If Math.Abs(NiOverride.GetBodyMorph(who, morphNames[p], NIO_KEY) - maxValues[p] * factor) < 0.000001
+		return
+	EndIf
+
 	int j = 0
 	while j < 128 && morphNames[j] != ""
-		float Value = maxValues[j] * arousal / 100 * scale
+		float Value = maxValues[j] * factor
 		NiOverride.SetBodyMorph(who, morphNames[j], NIO_KEY, Value)
 		If doDebug
 			debug.Notification("Aroused BodyMorphs: setting "+morphNames[j]+" to "+Value)
@@ -735,13 +836,17 @@ Function TweenPlayerReveal()
 	tweenGen += 1
 	Int myGen = tweenGen
 
-	Int steps = 10
+	; 5 steps x 0.2s: each step is 23 SetBodyMorph calls plus a full
+	; UpdateModelWeight mesh rebuild, so step count is the hitch budget --
+	; 5 rebuilds over ~1s reads as smooth, 10 was double the cost for no
+	; visible gain.
+	Int steps = 5
 	Int s = 1
 	While s <= steps && myGen == tweenGen
 		Float f = from + (target - from) * s / steps
 		SetActorMorphs(player, arousal, f)
 		PlayerArmorScale = f
-		Utility.Wait(0.1)
+		Utility.Wait(0.2)
 		s += 1
 	EndWhile
 

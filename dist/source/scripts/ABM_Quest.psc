@@ -22,10 +22,11 @@ bool Property IgnoreMales = true Auto Hidden
 ; NPC filter toggles. All three default to TRUE -- skipping dead actors and
 ; creatures is the conservative default that matches typical user expectation
 ; (morph effect on living humanoid NPCs only). Tunable in MCM.
-; Note: "Beast" here means engine-level creature actors (Skyrim's GetSex()
-; returns 2 for male creatures and 3 for female creatures), NOT the playable
-; beast races (Khajiit / Argonian / orc), which are GetSex() 0/1 and stay
-; covered by IgnoreMales.
+; Note: "Beast" here means engine-level creature actors (race without the
+; ActorTypeNPC keyword), NOT the playable beast races (Khajiit / Argonian /
+; orc), which carry ActorTypeNPC and stay covered by IgnoreMales.
+; ActorBase.GetSex() only returns -1/0/1 (None/Male/Female) -- it does NOT
+; encode creature-ness, which is why the filter reads the race keyword.
 bool Property IgnoreDead         = true Auto Hidden
 bool Property IgnoreMaleBeast    = true Auto Hidden
 bool Property IgnoreFemaleBeast  = true Auto Hidden

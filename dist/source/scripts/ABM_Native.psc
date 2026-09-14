@@ -27,11 +27,15 @@ String Function GetBackendName() Global Native
 
 Int Function UpdateActor(Actor akActor) Global Native
 {Native mirror of ABM_PlayerAlias.UpdateActor: fresh arousal read, filters,
- under-armor scale, SKEE morph writes. Returns the arousal written, -2 if
- skipped by filters/disabled, -1 if unavailable.}
+ under-armor scale, SKEE morph writes. Returns the arousal in effect, -2 if
+ skipped by filters/disabled, -1 if unavailable. The filters + arousal read
+ run inline (so the return code is real); the SKEE geometry write is queued
+ to the game's main thread and lands within a frame -- doing it on the
+ Papyrus VM thread would race the renderer.}
 
 Function ClearActorMorphs(Actor akActor) Global Native
-{Drop every morph under the ArousedBodyMorphs.esp NIO key for this actor.}
+{Drop every morph under the ArousedBodyMorphs.esp NIO key for this actor
+ (write queued to the main thread, same as UpdateActor).}
 
 Function PushConfig(Bool modEnabled, Bool ignoreMales, Bool ignoreDead, Bool ignoreMaleBeast, Bool ignoreFemaleBeast, Bool suppressUnderArmor, Float underArmorScale, Float pollInterval, Float scanRadius, Bool debugMode) Global Native
 {Mirror the MCM option block into the DLL. Call after any change.}

@@ -39,6 +39,7 @@ namespace
 			// resolve everything, then start listening.
 			ABM::Backend::Probe();
 			ABM::MorphApplier::ResolveSkee();
+			ABM::MorphApplier::ResolveForms();
 			ABM::Events::RegisterSinks();
 			ABM::Events::StartPollThread();
 			logger::info("Ready. Backend: {}", ABM::Backend::Describe());

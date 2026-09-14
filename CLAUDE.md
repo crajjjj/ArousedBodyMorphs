@@ -36,9 +36,33 @@ Event-driven replacement for the Papyrus update pipeline; see
   SetModEnabled, RestartPolling, MCM OnConfigClose). The DLL persists nothing.
 - **Every `ABM_Native.*` call in Papyrus must be gated** by
   `ABM_Native.IsInstalled()` (SKSE plugin query) — the natives are unbound
-  without the DLL. `ABM_PlayerAlias.NativeActive()` is the combined gate; all
-  Papyrus pipeline paths (poll, heartbeat, armor events, UpdateActor) stand
-  down when it is true.
+  without the DLL. `ABM_PlayerAlias.NativeActive()` is the combined gate
+  (cached per load via `ResolveNativeMode()` — a DLL install/uninstall needs a
+  game restart, so never re-probe per actor); all Papyrus pipeline paths
+  (poll, heartbeat, armor events, UpdateActor) stand down when it is true.
+- **Threading contract (CTD-critical):** `MorphApplier::UpdateActor` /
+  `ClearActor` do direct SKEE geometry work (`ApplyBodyMorphs`) and are MAIN
+  THREAD ONLY — reach them via `SKSE::GetTaskInterface()->AddTask`. The
+  Papyrus bindings use the `*Deferred` variants (evaluate inline for the
+  return code, queue the SKEE write); never bind the direct ones to Papyrus.
+  Event sinks only classify + queue, and bursty sources (heartbeat, equip)
+  coalesce through an `exchange(true)` pending flag.
+- **Unchanged-value skip:** both pipelines skip the morph writes + model
+  rebuild when the values are already applied. Every slot is
+  `maxValue[i] * factor` with one shared `factor` (`arousal/100 *
+  armorScale`), so ONE slot settles it: read the first non-zero-max morph
+  back under our key (`NiOverride.GetBodyMorph` / `IBodyMorphInterface::
+  GetMorph`) and compare to the target, tolerance 1e-6. **Deliberately no
+  cache** — SKEE is the single source of truth, so nothing needs
+  invalidating on a settings push, a save load, or an external clear, and
+  the comparison target moves with the settings by construction. Do not
+  "optimize" this back into a remembered value: the probe is one call
+  against 23 writes plus a mesh rebuild, and every cached variant of it grew
+  a staleness bug.
+- **Creature test:** a race without the `ActorTypeNPC` keyword is a creature,
+  in BOTH pipelines. `ActorBase.GetSex()` returns only -1/0/1
+  (None/Male/Female) — the folkloric 2/3 creature codes do not exist; never
+  reintroduce a `sex == 2/3` beast filter.
 - CommonLibSSE-NG vendored as submodule at `native\lib\commonlibsse-ng`
   (alandtse fork, `ng` branch, currently v8.0.1).
 

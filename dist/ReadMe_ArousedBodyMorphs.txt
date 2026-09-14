@@ -55,6 +55,8 @@ Features
   all morph writes go through SKEE directly -- much lower script load. Without
   the DLL (or on legacy SLA forks) the Papyrus pipeline runs as before. The
   MCM Requirements section shows which mode is active.
+  Known difference in native mode: armor removal snaps to the bare state
+  instantly -- the ~1s reveal ease is Papyrus-mode only for now.
 
 
 Credits
@@ -80,3 +82,22 @@ Changelog
     (C API), SKEE-direct morph writes; Papyrus fallback for legacy forks.
   - No SexLab requirement: masters are Skyrim, Update and SexLabAroused only,
     so OStim-only setups load fine.
+  - Correctness/performance pass:
+    - Beast filters actually work now: creature detection reads the race's
+      ActorTypeNPC keyword (ActorBase.GetSex() never returns the 2/3 creature
+      codes the old check tested for -- female creatures slipped through).
+      Papyrus and native mode now use the identical test.
+    - Unchanged-value skip in both pipelines: an update that would write the
+      values the body already has now costs a single read instead of 23 morph
+      writes plus a model-weight rebuild. The steady-state player poll no
+      longer rebuilds the body mesh every tick, and the NPC heartbeat sweep
+      no longer touches never-aroused bystanders at all.
+    - Native DLL: morph/clear writes requested from Papyrus (debug spell, MCM
+      "Check now", master switch) are queued to the game's main thread instead
+      of running on the script VM thread -- fixes a potential crash when the
+      renderer read the body mesh mid-write. Form lookups resolve once at
+      startup, an outfit swap coalesces into a single refresh, and the poll
+      thread shuts down cleanly on game exit instead of stalling it.
+    - Papyrus: reveal tween is 5 steps instead of 10 (half the mesh rebuilds,
+      same look), redress equip-event bursts are debounced, and the native-DLL
+      presence check is cached per load instead of re-asked per actor.
