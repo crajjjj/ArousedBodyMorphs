@@ -628,6 +628,11 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	EndIf
 	; 1e-6: float32 noise here is ~1e-8, the smallest dialable step ~1e-4.
 	If Math.Abs(NiOverride.GetBodyMorph(who, morphNames[p], NIO_KEY) - maxValues[p] * factor) < 0.000001
+		If doDebug
+			; Say so explicitly: otherwise a debug session sees no "setting ..."
+			; lines and can't tell "already correct" from "never ran".
+			debug.Trace("ABM: morphs already at target (factor "+factor+"), skipping write")
+		EndIf
 		return
 	EndIf
 

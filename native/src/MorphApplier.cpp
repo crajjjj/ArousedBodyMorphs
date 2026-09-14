@@ -143,6 +143,12 @@ namespace ABM::MorphApplier
 			}
 			const float current = g_bodyMorph->GetMorph(who, probe->name.c_str(), NIO_KEY);
 			if (std::fabs(current - probe->maxValue * factor) < 1e-6f) {
+				if (cfg->debugMode) {
+					// Say so explicitly, so a debug session can tell "already
+					// correct" from "never ran".
+					logger::info("ApplyMorphs: {} already at target (factor {})",
+						who->GetDisplayFullName(), factor);
+				}
 				return;
 			}
 
