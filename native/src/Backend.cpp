@@ -59,11 +59,11 @@ namespace ABM::Backend
 	{
 		switch (g_kind.load()) {
 		case Kind::kSlaNg:
-			return "SLA NG (native poll + heartbeat)";
+			return "$ABM_Backend_SlaNg";
 		case Kind::kOsl:
-			return "OSL Aroused (event-driven)";
+			return "$ABM_Backend_Osl";
 		default:
-			return "none - Papyrus mode";
+			return "$ABM_Backend_Papyrus";
 		}
 	}
 

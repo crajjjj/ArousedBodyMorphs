@@ -70,6 +70,8 @@
             <!-- Compiled Papyrus scripts -->
             <Match In="scripts">*.pex</Match>
             <Match In="SKSE">*</Match>
+            <!-- MCM translation files -->
+            <Match In="Interface">*</Match>
             <!-- Papyrus source scripts -->
             <Match In="source\scripts">*.psc</Match>
         </ZipFile>

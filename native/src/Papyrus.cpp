@@ -22,7 +22,7 @@ namespace ABM::Papyrus
 		RE::BSFixedString GetBackendName(RE::StaticFunctionTag*)
 		{
 			if (!MorphApplier::SkeeReady() && Backend::GetKind() != Backend::Kind::kNone) {
-				return "no SKEE - Papyrus mode";
+				return "$ABM_Backend_NoSkee";
 			}
 			return Backend::Describe();
 		}

@@ -49,7 +49,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10003
+	return 10004
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -89,8 +89,8 @@ endEvent
 
 Function SetupPages()
 	Pages = new string[2]
-	Pages[0] = "General"
-	Pages[1] = "Morphs"
+	Pages[0] = "$ABM_Page_General"
+	Pages[1] = "$ABM_Page_Morphs"
 EndFunction
 
 Function RefreshReqFlag()
@@ -184,6 +184,13 @@ Function ClearOptionIDs()
 	endWhile
 EndFunction
 
+; Display strings are "$ABM_*" keys resolved from
+; Interface\Translations\ArousedBodyMorphs_<LANGUAGE>.txt (the file stem is the
+; PLUGIN name, not the MCM's ModName). SkyUI only substitutes when the WHOLE
+; string matches a key -- "$ABM_Foo bar" is left verbatim -- so the handful of
+; strings below that concatenate a live value (title + version, the morph count,
+; the applied-arousal readout) are deliberately left in English rather than
+; rendered as a broken half-translated label.
 Function DrawGeneralPage()
 	SetCursorFillMode(TOP_TO_BOTTOM)
 
@@ -192,79 +199,79 @@ Function DrawGeneralPage()
 	AddHeaderOption("Aroused BodyMorphs " + version)
 	; Master switch. Never carries hasReqFlag -- it's the way back out of the
 	; disabled state, so it has to stay clickable.
-	oidModEnabled = AddToggleOption("Mod enabled", MainQuest.ModEnabled)
+	oidModEnabled = AddToggleOption("$ABM_Opt_ModEnabled", MainQuest.ModEnabled)
 
-	AddHeaderOption("Requirements")
+	AddHeaderOption("$ABM_Hdr_Requirements")
 	; Plain (disabled) status text, not clickable toggles -- these are read-only.
-	String nioLabel = "MISSING"
+	String nioLabel = "$ABM_Val_Missing"
 	If MainQuest.isNioOk
-		nioLabel = "OK"
+		nioLabel = "$ABM_Val_OK"
 	EndIf
-	AddTextOption("NiOverride / RaceMenu (SKEE)", nioLabel, OPTION_FLAG_DISABLED)
-	String slaLabel = "MISSING - try loading a save"
+	AddTextOption("$ABM_Opt_NiOverride", nioLabel, OPTION_FLAG_DISABLED)
+	String slaLabel = "$ABM_Val_MissingTryLoad"
 	If MainQuest.isSLAroused29
-		slaLabel = "OK - NG / 3.x"
+		slaLabel = "$ABM_Val_SlaNG"
 	ElseIf MainQuest.isSLAroused28
-		slaLabel = "OK - Legacy / OSL stub"
+		slaLabel = "$ABM_Val_SlaLegacy"
 	EndIf
-	AddTextOption("SexLab Aroused", slaLabel, OPTION_FLAG_DISABLED)
+	AddTextOption("$ABM_Opt_SexLabAroused", slaLabel, OPTION_FLAG_DISABLED)
 	; Optional native layer status. Without the DLL the row says so and the
 	; Papyrus pipeline (this file's siblings) does all the work.
-	String nativeLabel = "not installed - Papyrus mode"
+	String nativeLabel = "$ABM_Backend_None"
 	If ABM_Native.IsInstalled()
 		nativeLabel = ABM_Native.GetBackendName()
 	EndIf
-	AddTextOption("Native engine (SKSE DLL)", nativeLabel, OPTION_FLAG_DISABLED)
+	AddTextOption("$ABM_Opt_NativeEngine", nativeLabel, OPTION_FLAG_DISABLED)
 	; Live sanity check: click to read arousal fresh from SLA and re-apply morphs
 	; (PokePlayerArousal on the alias).
-	AddTextOptionST("State_CheckPlayer", "Player arousal", "Check now", reqOnlyFlag)
+	AddTextOptionST("State_CheckPlayer", "$ABM_Opt_PlayerArousal", "$ABM_Val_CheckNow", reqOnlyFlag)
 
-	AddHeaderOption("Intensity preset")
+	AddHeaderOption("$ABM_Hdr_IntensityPreset")
 	; Selecting a preset overwrites every MaxValue slider it has a key for;
 	; morphs the preset doesn't cover (custom imports) keep their values.
 	String presetLabel = MainQuest.IntensityPreset
 	If presetLabel == ""
-		presetLabel = "Choose..."
+		presetLabel = "$ABM_Val_Choose"
 	EndIf
-	AddMenuOptionST("State_IntensityPreset", "Preset", presetLabel, hasReqFlag)
+	AddMenuOptionST("State_IntensityPreset", "$ABM_Opt_Preset", presetLabel, hasReqFlag)
 
-	AddHeaderOption("Under armor")
-	oidSuppressUnderArmor = AddToggleOption("Suppress morphs under armor", MainQuest.SuppressUnderArmor, hasReqFlag)
+	AddHeaderOption("$ABM_Hdr_UnderArmor")
+	oidSuppressUnderArmor = AddToggleOption("$ABM_Opt_SuppressUnderArmor", MainQuest.SuppressUnderArmor, hasReqFlag)
 	; Slider stays visible but disabled while suppression is off, so its role is clear.
 	int uaFlag = hasReqFlag
 	if !MainQuest.SuppressUnderArmor
 		uaFlag = OPTION_FLAG_DISABLED
 	endif
-	oidUnderArmorScale = AddSliderOption("Nipple size under armor", MainQuest.UnderArmorScale, "{2}", uaFlag)
+	oidUnderArmorScale = AddSliderOption("$ABM_Opt_NippleSizeUnderArmor", MainQuest.UnderArmorScale, "{2}", uaFlag)
 
-	AddHeaderOption("Performance")
-	oidPollInterval   = AddSliderOption("Player poll interval (s)", MainQuest.PollInterval, "{1}", hasReqFlag)
-	oidScanCellRadius = AddSliderOption("NPC scan radius (units)",  MainQuest.ScanCellRadius, "{0}", hasReqFlag)
+	AddHeaderOption("$ABM_Hdr_Performance")
+	oidPollInterval   = AddSliderOption("$ABM_Opt_PollInterval", MainQuest.PollInterval, "{1}", hasReqFlag)
+	oidScanCellRadius = AddSliderOption("$ABM_Opt_ScanRadius",  MainQuest.ScanCellRadius, "{0}", hasReqFlag)
 
 	;Right side
 	SetCursorPosition(1)
-	AddHeaderOption("Actor filters")
-	oidIgnoreMales       = AddToggleOption("Ignore males",         MainQuest.IgnoreMales)
-	oidIgnoreDead        = AddToggleOption("Ignore dead",          MainQuest.IgnoreDead)
-	oidIgnoreMaleBeast   = AddToggleOption("Ignore male beasts",   MainQuest.IgnoreMaleBeast)
-	oidIgnoreFemaleBeast = AddToggleOption("Ignore female beasts", MainQuest.IgnoreFemaleBeast)
+	AddHeaderOption("$ABM_Hdr_ActorFilters")
+	oidIgnoreMales       = AddToggleOption("$ABM_Opt_IgnoreMales",         MainQuest.IgnoreMales)
+	oidIgnoreDead        = AddToggleOption("$ABM_Opt_IgnoreDead",          MainQuest.IgnoreDead)
+	oidIgnoreMaleBeast   = AddToggleOption("$ABM_Opt_IgnoreMaleBeasts",   MainQuest.IgnoreMaleBeast)
+	oidIgnoreFemaleBeast = AddToggleOption("$ABM_Opt_IgnoreFemaleBeasts", MainQuest.IgnoreFemaleBeast)
 
-	AddHeaderOption("Debug")
+	AddHeaderOption("$ABM_Hdr_Debug")
 	; Not gated: its traces and the debug spell are exactly what you want when the
 	; requirements check is failing or the mod has been switched off.
-	oidDebugMode = AddToggleOption("Debug mode", MainQuest.DebugMode)
+	oidDebugMode = AddToggleOption("$ABM_Opt_DebugMode", MainQuest.DebugMode)
 
-	AddHeaderOption("Import / Export")
+	AddHeaderOption("$ABM_Hdr_ImportExport")
 	; Deliberately never disabled: they only move JSON <-> quest properties, and
 	; staying usable when the requirements check fails is part of the recovery
 	; story (same reasoning as the Reset button below).
-	AddTextOptionST("State_Import", "Import settings", "Import", 0)
-	AddTextOptionST("State_Export", "Export settings", "Export", 0)
+	AddTextOptionST("State_Import", "$ABM_Opt_ImportSettings", "$ABM_Val_Import", 0)
+	AddTextOptionST("State_Export", "$ABM_Opt_ExportSettings", "$ABM_Val_Export", 0)
 
-	AddHeaderOption("Recovery")
+	AddHeaderOption("$ABM_Hdr_Recovery")
 	; Reset stays enabled even when NiOverride is missing -- the whole point
 	; of this button is to recover from a state where things aren't right.
-	AddTextOptionST("State_Reset", "Reset all state", "Reset", 0)
+	AddTextOptionST("State_Reset", "$ABM_Opt_ResetAllState", "$ABM_Val_Reset", 0)
 EndFunction
 
 Function DrawMorphsPage()
@@ -276,8 +283,8 @@ Function DrawMorphsPage()
 	;Left side
 	SetCursorPosition(0)
 	AddHeaderOption("Morphs (" + MorphsShown + ")")
-	AddTextOption("Note: NippleSize is an inverted slider;", "", OPTION_FLAG_DISABLED)
-	AddTextOption("smaller number means bigger result.", "", OPTION_FLAG_DISABLED)
+	AddTextOption("$ABM_Note_Inverted1", "", OPTION_FLAG_DISABLED)
+	AddTextOption("$ABM_Note_Inverted2", "", OPTION_FLAG_DISABLED)
 
 	; Display order: grouped by area, table order preserved within a group.
 	; order[d] maps display position -> table index, so the handlers keep
@@ -335,20 +342,20 @@ EndFunction
 
 state State_CheckPlayer
 	event OnHighlightST()
-		SetInfoText("Click to read the player's arousal fresh from SexLab Aroused and re-apply the morphs immediately. Quick way to verify the mod is working without waiting for the poll or SLA's scan tick. Shows the arousal that was actually written; \"skipped by filters\" means an Actor filter excluded your character (e.g. a male player with 'Ignore males' on), so no morphs were applied.")
+		SetInfoText("$ABM_Info_CheckPlayer")
 	endevent
 	event OnSelectST()
 		SetTextOptionValueST("...")
 		int arousal = MainQuest.PlayerAlias.PokePlayerArousal()
 		If arousal == -1
-			SetTextOptionValueST("SLA unavailable")
+			SetTextOptionValueST("$ABM_Val_SlaUnavailable")
 		ElseIf arousal == -3
 			; Master switch is off -- the mod writes nothing by design.
-			SetTextOptionValueST("mod disabled")
+			SetTextOptionValueST("$ABM_Val_ModDisabled")
 		ElseIf arousal == -2
 			; The actor filters (Ignore males / dead / beasts) excluded the player, so
 			; UpdateActor wrote nothing -- reporting a number here would be a false pass.
-			SetTextOptionValueST("skipped by filters")
+			SetTextOptionValueST("$ABM_Val_SkippedByFilters")
 		Else
 			SetTextOptionValueST(arousal + " (applied)")
 		EndIf
@@ -357,29 +364,29 @@ endstate
 
 state State_Import
 	event OnHighlightST()
-		SetInfoText("Load toggles, sliders and the morph table from SKSE\\Plugins\\StorageUtilData\\ArousedBodyMorphs\\ (config.json + morph.json). Overwrites your current MCM values.")
+		SetInfoText("$ABM_Info_Import")
 	endevent
 	event OnSelectST()
 		ImportUserSettings()
-		SetTextOptionValueST("Loading...")
+		SetTextOptionValueST("$ABM_Val_Loading")
 		ForcePageReset()
 	endevent
 endstate
 
 state State_Export
 	event OnHighlightST()
-		SetInfoText("Save the current toggles, sliders and morph table to SKSE\\Plugins\\StorageUtilData\\ArousedBodyMorphs\\ (config.json + morph.json). Use it to back up tuning or copy it between saves.")
+		SetInfoText("$ABM_Info_Export")
 	endevent
 	event OnSelectST()
 		ExportUserSettings()
-		SetTextOptionValueST("Loading...")
+		SetTextOptionValueST("$ABM_Val_Loading")
 		ForcePageReset()
 	endevent
 endstate
 
 state State_Reset
 	event OnHighlightST()
-		SetInfoText("Wipe everything back to install defaults: the full nipple / areola / vagina morph set at the Natural preset values, all toggles to their on-install state, scan radius 1000, poll 5s. Re-runs the SLA / NiOverride requirements check. Use this to recover from broken save state (sliders all 0.00, SLA requirement stuck on \"MISSING\"). Your tuning will be lost -- afterwards pick an Intensity preset or tune the sliders.")
+		SetInfoText("$ABM_Info_Reset")
 	endevent
 	event OnSelectST()
 		MainQuest.ResetAllState()
@@ -399,7 +406,7 @@ state State_Reset
 		; Sync the MCM-side morph count to the rebuilt table (persisted separately
 		; from the quest's MorphNames array, which the quest reset doesn't see).
 		MorphsShown = MainQuest.MorphCount()
-		SetTextOptionValueST("Done")
+		SetTextOptionValueST("$ABM_Val_Done")
 		ForcePageReset()
 	endevent
 endstate
@@ -425,7 +432,7 @@ state State_IntensityPreset
 		If index < 0 || index >= names.Length
 			return
 		EndIf
-		SetMenuOptionValueST("Loading...")
+		SetMenuOptionValueST("$ABM_Val_Loading")
 		String preset = names[index]
 		ApplyIntensityPreset(preset)
 		MainQuest.IntensityPreset = preset
@@ -434,7 +441,7 @@ state State_IntensityPreset
 		ForcePageReset()
 	endevent
 	event OnHighlightST()
-		SetInfoText("Overwrites the per-morph MaxValue sliders with a named preset. Minimal = barely visible at peak arousal. Natural = realistic when fully aroused; the install default. Noticeable = clearly visible. Exaggerated = strongly emphasised. Your tuning will be replaced; the Reset all state button also returns the sliders to the Natural values.")
+		SetInfoText("$ABM_Info_Preset")
 	endevent
 endstate
 
@@ -619,37 +626,37 @@ EndEvent
 
 Event OnOptionHighlight(Int option)
 	If option == oidModEnabled
-		SetInfoText("Master switch. Turn it off to stop the mod completely: the arousal morphs are cleared from you and from nearby NPCs (back to your BodySlide baseline), the player poll stops, and the SexLab / SexLab Aroused events are ignored -- no script work at all. Your slider tuning is kept, so turning it back on restores everything. NPCs further away than the scan radius keep their last morphs until they are near you again with the mod on.")
+		SetInfoText("$ABM_Info_ModEnabled")
 	ElseIf option == oidDebugMode
-		SetInfoText("Will print debug info to screen and log.")
+		SetInfoText("$ABM_Info_DebugMode")
 	ElseIf option == oidIgnoreMales
-		SetInfoText("If on, male NPC actors are skipped entirely (no morph updates). On by default.")
+		SetInfoText("$ABM_Info_IgnoreMales")
 	ElseIf option == oidIgnoreDead
-		SetInfoText("If on, dead actors are skipped (no morphs applied to corpses). Filters at both the cell scan and the player poll. On by default.")
+		SetInfoText("$ABM_Info_IgnoreDead")
 	ElseIf option == oidIgnoreMaleBeast
-		SetInfoText("If on, male creature actors (animals/monsters, not the playable beast races) are skipped. On by default.")
+		SetInfoText("$ABM_Info_IgnoreMaleBeasts")
 	ElseIf option == oidIgnoreFemaleBeast
-		SetInfoText("If on, female creature actors (animals/monsters, not the playable beast races) are skipped. On by default.")
+		SetInfoText("$ABM_Info_IgnoreFemaleBeasts")
 	ElseIf option == oidPollInterval
-		SetInfoText("Seconds between player-only arousal refreshes. SLA NG only broadcasts every 120s by default, so polling keeps morphs responsive mid-scene. Set to 0 to disable polling (NPC morphs still update on SLA's scan tick).")
+		SetInfoText("$ABM_Info_PollInterval")
 	ElseIf option == oidScanCellRadius
-		SetInfoText("Radius (game units) the SLA heartbeat scans for aroused NPCs. Default 1000 ~= one room. Larger values catch more actors but cost more per heartbeat tick. Set to 0 to skip NPCs entirely and morph only you -- NPCs already morphed are cleared when you do.")
+		SetInfoText("$ABM_Info_ScanRadius")
 	ElseIf option == oidSuppressUnderArmor
-		SetInfoText("If on, arousal morphs are scaled down while the chest is covered, so nipples don't clip through tops. If Advanced Nudity Detection is installed, its Topless/Nude state decides 'covered' (bikinis/skimpy tops handled correctly); otherwise any worn cuirass/body clothing counts. On by default.")
+		SetInfoText("$ABM_Info_SuppressUnderArmor")
 	ElseIf option == oidUnderArmorScale
-		SetInfoText("How much of the arousal morph remains while the chest is covered. 0.00 = nipples flat under armor (no clipping); 1.00 = no reduction. Negative values invert the morph -- because NippleSize is inverted, a negative scale pushes the nipples smaller than baseline (an active tuck for tight tops). Only applies when 'Suppress morphs under armor' is on.")
+		SetInfoText("$ABM_Info_UnderArmorScale")
 	Else
 		int i = 0
 		while i < MorphsShown
 			If option == oidMaxValue[i]
-				SetInfoText("Value of Morph " + MainQuest.MorphNames[i] + " at arousal 100")
+				SetInfoText("$ABM_Info_MorphSlider")
 				return
 			Endif
 			i += 1
 		endWhile
 
 		;Default:
-		SetInfoText("Aroused BodyMorphs "+version+" by crajjjj. Inspired by the ArousedNips family of mods.")
+		SetInfoText("$ABM_Info_Default")
 	EndIf
 EndEvent
 

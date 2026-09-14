@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.3
+Aroused BodyMorphs 1.0.4
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -47,6 +47,8 @@ Features
   Detection aware
 - Actor filters: ignore males / dead / male beasts / female beasts;
   NPC scan radius (0 = player only)
+- Translatable MCM: Interface\Translations\ArousedBodyMorphs_<LANGUAGE>.txt
+  (English shipped for all 10 languages; drop in a translated file to replace)
 - Import/Export of all settings + the morph table via JSON
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
 - Debug mode with a lesser power that dumps an actor's morph state to the

@@ -249,11 +249,11 @@ EndFunction
 String Function GroupName(Int groupId)
 	{Display name of an area group (MCM section headers).}
 	If groupId == 0
-		Return "Nipples"
+		Return "$ABM_Group_Nipples"
 	ElseIf groupId == 1
-		Return "Areolas"
+		Return "$ABM_Group_Areolas"
 	ElseIf groupId == 2
-		Return "Vagina"
+		Return "$ABM_Group_Vagina"
 	EndIf
-	Return "Other"
+	Return "$ABM_Group_Other"
 EndFunction
