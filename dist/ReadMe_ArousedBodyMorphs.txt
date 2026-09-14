@@ -70,7 +70,6 @@ Changelog
 1.0.3
 - Fixed the debug lesser power being left in your Powers list after "Reset all
   state": Reset switches Debug mode off, and now removes the power with it.
-  Saves already affected are repaired by opening the MCM once.
 
 1.0.2
 - NPC scan radius can now be set to 0, which switches NPC updates off entirely:

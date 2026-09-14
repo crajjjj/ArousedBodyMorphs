@@ -30,10 +30,10 @@ int[] oidMaxValue
 
 string version
 
-; "The debug power may need syncing on close." Set by the Debug mode toggle, by
-; an import that flips it, and by OnConfigOpen when the power and the toggle
-; disagree. OnConfigClose then adds or removes to match DebugMode -- idempotent,
-; so a spurious flag is harmless.
+; Set when DebugMode changes in this menu (the toggle, or an import that flips
+; it); OnConfigClose then grants or removes the power to match. Reset does its
+; own removal instead, since it must not leave the menu and the Powers list
+; disagreeing even briefly.
 bool toggleDebugSpell = false
 
 String Property ConfigFile = "ArousedBodyMorphs/config.json" Auto hidden
@@ -52,7 +52,7 @@ int function GetVersion()
 	; 10000 = 1.00.00 -- initial release.
 	; 10001 = 1.00.01 -- re-apply the player's morphs on MCM close.
 	; 10002 = 1.00.02 -- NPC scan radius 0 switches NPC updates off.
-	; 10003 = 1.00.03 -- reconcile the debug power with the toggle on MCM open.
+	; 10003 = 1.00.03 -- Reset removes the debug power along with the toggle.
 	return 10003
 endFunction
 
@@ -89,17 +89,6 @@ event OnConfigOpen()
 	; Keep the MCM-side morph count in sync with whatever the table actually holds
 	; (Import and Reset both change it).
 	MorphsShown = MainQuest.MorphCount()
-
-	; Backstop: reconcile the debug power against the toggle. The Reset button
-	; now removes the power itself, so this should never fire on a mod that has
-	; only ever run 1.0.3+ -- it is here to repair saves that were Reset under
-	; 1.0.2 or earlier (where the power was stranded in the Powers list with the
-	; toggle reading Off) and to catch any future path that writes DebugMode
-	; without going through this menu. One HasSpell call per menu open.
-	Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
-	If pc && MainQuest.DebugMode != pc.HasSpell(DebugSpell)
-		toggleDebugSpell = true
-	EndIf
 endEvent
 
 Function SetupPages()
