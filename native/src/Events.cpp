@@ -45,6 +45,9 @@ namespace ABM::Events
 			MorphApplier::UpdateActor(player);
 
 			auto cfg = Settings::Snapshot();
+			if (cfg->scanRadius <= 0.0f) {
+				return;  // NPC updates switched off in the MCM -- player only
+			}
 			const float radiusSq = cfg->scanRadius * cfg->scanRadius;
 			auto processLists = RE::ProcessLists::GetSingleton();
 			if (!processLists) {

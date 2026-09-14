@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.1
+Aroused BodyMorphs 1.0.2
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -45,7 +45,8 @@ Features
 - Under-armor suppression: morphs scale down (default: flat) while the chest is
   covered, with a smooth ~1s reveal when the top comes off; Advanced Nudity
   Detection aware
-- Actor filters: ignore males / dead / male beasts / female beasts
+- Actor filters: ignore males / dead / male beasts / female beasts;
+  NPC scan radius (0 = player only)
 - Import/Export of all settings + the morph table via JSON
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
 - Debug mode with a lesser power that dumps an actor's morph state to the
@@ -66,6 +67,14 @@ Inspired by the ArousedNips family of mods and their community forks.
 
 Changelog
 ---------
+1.0.2
+- NPC scan radius can now be set to 0, which switches NPC updates off entirely:
+  only you get arousal morphs. NPCs already morphed are cleared at the moment
+  you set it, so nobody is left frozen at their last values.
+  (0 previously meant "scan the whole cell" to PapyrusUtil -- the opposite --
+  and was only reachable by hand-editing config.json. Imported values outside
+  0..10000 now fall back to the default.)
+
 1.0.1
 - Closing the MCM now re-applies your morphs immediately. Picking an intensity
   preset or moving a slider only changed the stored values; the body caught up

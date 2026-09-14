@@ -250,11 +250,26 @@ Function SetModEnabled(Bool enabled)
 	EndIf
 EndFunction
 
-Actor[] Function ScanNearbyAroused(Bool ignoreDead)
+Actor[] Function ScanNearbyAroused(Bool ignoreDead, Float radiusOverride = -1.0)
 	{The aroused NPCs near the player, or None when SLA can't be queried. Shared
 	 by the heartbeat and both master-switch directions so all three agree on who
 	 counts as nearby. Bails on a None slaArousal faction rather than feeding it
-	 to ScanCellNPCsByFaction, where it is unspecified.}
+	 to ScanCellNPCsByFaction, where it is unspecified.
+
+	 radiusOverride < 0 means "use the MCM's ScanCellRadius" (the normal case);
+	 a caller passes an explicit radius to sweep at a value the setting no longer
+	 holds -- see ClearNearbyMorphsAt.
+
+	 Radius 0 = NPC updates switched off, and the guard below MUST come before
+	 the scan call: PapyrusUtil reads 0.0 as "no limit, search the entire cell",
+	 so passing it through would do the exact opposite of what the user asked.}
+	Float radius = MainQuest.ScanCellRadius
+	If radiusOverride >= 0.0
+		radius = radiusOverride
+	EndIf
+	If radius <= 0.0
+		Return None
+	EndIf
 	slaFrameworkScr framework = GetFramework()
 	If !framework
 		Return None
@@ -265,7 +280,35 @@ Actor[] Function ScanNearbyAroused(Bool ignoreDead)
 		EndIf
 		Return None
 	EndIf
-	Return MiscUtil.ScanCellNPCsByFaction(framework.slaArousal, GetPlayerRef(), MainQuest.ScanCellRadius, 0, 127, ignoreDead)
+	Return MiscUtil.ScanCellNPCsByFaction(framework.slaArousal, GetPlayerRef(), radius, 0, 127, ignoreDead)
+EndFunction
+
+Function ClearNearbyMorphsAt(Float radius)
+	{Clear our morphs from the aroused NPCs within an explicit radius. Called by
+	 the MCM when the scan radius is turned down to 0: the NPCs already morphed
+	 would otherwise freeze at their last values with nothing left to update
+	 them, which is the "stuck" state the master switch exists to rule out. The
+	 OLD radius is passed in because the setting has already been written.}
+	If !MainQuest.isNioOk
+		return
+	EndIf
+	ClearActorList(ScanNearbyAroused(false, radius))
+EndFunction
+
+Function ClearActorList(Actor[] theActors)
+	{Clear our morphs from every non-null entry. Scan results can have null slots
+	 when SLA's faction-rank cache is mid-update.}
+	If !theActors
+		return
+	EndIf
+	int i = 0
+	int len = theActors.length
+	While i < len
+		If theActors[i]
+			ClearActorMorphs(theActors[i])
+		EndIf
+		i += 1
+	EndWhile
 EndFunction
 
 Function UpdateNearbyActors(Bool doDebug)
@@ -306,26 +349,15 @@ Function ClearAllMorphs()
 	 The isNioOk bail matters: the master toggle is never greyed out, so it can be
 	 clicked with no SKEE installed, where these natives have nothing to bind to.
 	 IgnoreDead is false here -- a corpse morphed while alive still needs cleaning.
-	 NPCs beyond ScanCellRadius keep their values until back in range.}
+	 NPCs beyond ScanCellRadius keep their values until back in range, and at
+	 radius 0 there are none to clear (nothing was ever written to them).}
 	PlayerArmorScale = 1.0
 	PlayerLastArousal = 0
 	If !MainQuest.isNioOk
 		return
 	EndIf
 	ClearActorMorphs(GetPlayerRef())
-
-	Actor[] theActors = ScanNearbyAroused(false)
-	If !theActors
-		return
-	EndIf
-	int i = 0
-	int len = theActors.length
-	While i < len
-		If theActors[i]
-			ClearActorMorphs(theActors[i])
-		EndIf
-		i += 1
-	EndWhile
+	ClearActorList(ScanNearbyAroused(false))
 EndFunction
 
 Int Function PokePlayerArousal()

@@ -47,7 +47,8 @@ int function GetVersion()
 	;12345 => 1.23.45
 	; 10000 = 1.00.00 -- initial release.
 	; 10001 = 1.00.01 -- re-apply the player's morphs on MCM close.
-	return 10001
+	; 10002 = 1.00.02 -- NPC scan radius 0 switches NPC updates off.
+	return 10002
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -528,7 +529,8 @@ Event OnOptionSliderOpen(Int option)
 		SetSliderDialogDefaultValue(MainQuest.DefaultPollInterval)
 		return
 	ElseIf option == oidScanCellRadius
-		SetSliderDialogRange(100.0, 10000.0)
+		; Starts at 0 = NPC updates off; the 100 interval keeps 0 reachable.
+		SetSliderDialogRange(0.0, 10000.0)
 		SetSliderDialogInterval(100.0)
 		SetSliderDialogStartValue(MainQuest.ScanCellRadius)
 		SetSliderDialogDefaultValue(MainQuest.DefaultScanCellRadius)
@@ -567,8 +569,14 @@ Event OnOptionSliderAccept(Int option, Float value)
 		MainQuest.PlayerAlias.RestartPolling()
 		return
 	ElseIf option == oidScanCellRadius
+		Float oldRadius = MainQuest.ScanCellRadius
 		MainQuest.ScanCellRadius = value
 		SetSliderOptionValue(option, MainQuest.ScanCellRadius, "{0}")
+		; Turning NPCs off: sweep at the OLD radius first, or everyone already
+		; morphed freezes at their last values with nothing left to update them.
+		If value <= 0.0 && oldRadius > 0.0
+			MainQuest.PlayerAlias.ClearNearbyMorphsAt(oldRadius)
+		EndIf
 		return
 	ElseIf option == oidUnderArmorScale
 		MainQuest.UnderArmorScale = value
@@ -604,7 +612,7 @@ Event OnOptionHighlight(Int option)
 	ElseIf option == oidPollInterval
 		SetInfoText("Seconds between player-only arousal refreshes. SLA NG only broadcasts every 120s by default, so polling keeps morphs responsive mid-scene. Set to 0 to disable polling (NPC morphs still update on SLA's scan tick).")
 	ElseIf option == oidScanCellRadius
-		SetInfoText("Radius (game units) the SLA heartbeat scans for aroused NPCs. Default 1000 ~= one room. Larger values catch more actors but cost more per heartbeat tick.")
+		SetInfoText("Radius (game units) the SLA heartbeat scans for aroused NPCs. Default 1000 ~= one room. Larger values catch more actors but cost more per heartbeat tick. Set to 0 to skip NPCs entirely and morph only you -- NPCs already morphed are cleared when you do.")
 	ElseIf option == oidSuppressUnderArmor
 		SetInfoText("If on, arousal morphs are scaled down while the chest is covered, so nipples don't clip through tops. If Advanced Nudity Detection is installed, its Topless/Nude state decides 'covered' (bikinis/skimpy tops handled correctly); otherwise any worn cuirass/body clothing counts. On by default.")
 	ElseIf option == oidUnderArmorScale
@@ -639,6 +647,12 @@ Bool Function ImportUserSettings()
 	MainQuest.IgnoreMaleBeast   = (GetStringValue(ConfigFile, "ignoremalebeast",   "1") as int) as bool
 	MainQuest.IgnoreFemaleBeast = (GetStringValue(ConfigFile, "ignorefemalebeast", "1") as int) as bool
 	MainQuest.ScanCellRadius    = GetStringValue(ConfigFile, "scancellradius", "1000") as float
+	; Clamp to the MCM's own range. A hand-edited or unparseable value casts to
+	; 0.0, which is a real setting now (NPCs off) rather than the old footgun
+	; where PapyrusUtil read it as "scan the entire cell".
+	If MainQuest.ScanCellRadius < 0.0 || MainQuest.ScanCellRadius > 10000.0
+		MainQuest.ScanCellRadius = MainQuest.DefaultScanCellRadius
+	EndIf
 	MainQuest.PollInterval      = GetStringValue(ConfigFile, "pollinterval",   "5")    as float
 	; "Natural" as the missing-default: the built-in slider defaults ARE the
 	; Natural tier, so a config.json without this key still reports honestly.
