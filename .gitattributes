@@ -1,0 +1,4 @@
+# MCM translation files are UTF-16 LE with BOM. Git's binary heuristic already
+# spares them, but say it explicitly: any line-ending conversion corrupts them
+# into a file SkyUI silently fails to load.
+dist/Interface/Translations/*.txt -text
