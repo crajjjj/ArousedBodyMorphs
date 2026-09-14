@@ -47,9 +47,9 @@ Features
   Detection aware
 - Actor filters: ignore males / dead / male beasts / female beasts;
   NPC scan radius (0 = player only)
-- Translated MCM in 10 languages: English, Chinese, Czech, French, German,
-  Italian, Japanese, Polish, Russian, Spanish. The game's language picks the
-  file automatically.
+- Translated MCM in 11 languages: English, Chinese, Czech, French, German,
+  Italian, Japanese, Polish, Russian, Spanish, Ukrainian. The game's language
+  picks the file automatically.
 - Import/Export of all settings + the morph table via JSON
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
 - Debug mode with a lesser power that dumps an actor's morph state to the
