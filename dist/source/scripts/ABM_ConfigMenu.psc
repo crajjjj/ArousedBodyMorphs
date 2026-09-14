@@ -90,13 +90,12 @@ event OnConfigOpen()
 	; (Import and Reset both change it).
 	MorphsShown = MainQuest.MorphCount()
 
-	; Reconcile the debug power against the toggle. Only this menu ever calls
-	; addSpell/removeSpell, but DebugMode can be written from outside it --
-	; ResetAllState forces it false, and that chain DELIBERATELY must not call
-	; back into the MCM (doing so froze the game in the predecessor mod). So the
-	; power could be left on the player with the toggle reading Off, and the only
-	; way out was to switch Debug on and off again. Flagging the mismatch here
-	; lets OnConfigClose fix it through the existing add/remove path.
+	; Backstop: reconcile the debug power against the toggle. The Reset button
+	; now removes the power itself, so this should never fire on a mod that has
+	; only ever run 1.0.3+ -- it is here to repair saves that were Reset under
+	; 1.0.2 or earlier (where the power was stranded in the Powers list with the
+	; toggle reading Off) and to catch any future path that writes DebugMode
+	; without going through this menu. One HasSpell call per menu open.
 	Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
 	If pc && MainQuest.DebugMode != pc.HasSpell(DebugSpell)
 		toggleDebugSpell = true
@@ -399,6 +398,19 @@ state State_Reset
 	endevent
 	event OnSelectST()
 		MainQuest.ResetAllState()
+		; Drop the debug power here, now. ResetAllState forces DebugMode off but
+		; cannot remove the power itself: it also runs from Quest.OnInit, where
+		; calling back into this menu mid-registration froze the game in the
+		; predecessor mod. That constraint is on the QUEST, though -- we ARE the
+		; menu, and we own the spell property, so the reset button can just do it
+		; rather than leave the toggle and the Powers list disagreeing until the
+		; next menu close. (OnInit's own reset never needs this: nothing was ever
+		; granted on a first install.)
+		Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
+		If pc
+			pc.RemoveSpell(DebugSpell)
+		EndIf
+		toggleDebugSpell = false
 		; Sync the MCM-side morph count to the rebuilt table (persisted separately
 		; from the quest's MorphNames array, which the quest reset doesn't see).
 		MorphsShown = MainQuest.MorphCount()
