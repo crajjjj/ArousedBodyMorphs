@@ -1,0 +1,725 @@
+ScriptName ABM_PlayerAlias extends ReferenceAlias
+{Player alias: requirements detection, event handling, and the morph writer.}
+
+ABM_Quest Property MainQuest Auto
+
+; RaceMenu / SKEE version gates for the BodyMorph API
+Int Property SKEE_VERSION = 1 AutoReadOnly
+Int Property NIOVERRIDE_SCRIPT_VERSION = 6 AutoReadOnly
+
+; Every BodyMorph this mod writes is registered under this key, so ClearActorMorphs
+; can remove exactly our morphs and nothing else.
+String Property NIO_KEY = "ArousedBodyMorphs.esp" AutoReadOnly hidden
+
+slaFrameworkScr Property sla_Framework Auto
+SexLabFramework Property SexLabQuestFramework Auto
+
+; --- Top-nudity / armor-suppression state ---
+; Resolved fresh on every load by ResolveNudityDetection(). IsTopCovered uses the
+; vanilla ArmorCuirass / ClothingBody worn-keyword check as primary; when Advanced
+; Nudity Detection ("Advanced Nudity Detection.esp") is present its Topless/Nude
+; faction ranks (the same formIDs SLA NG resolves -- see slamainscr.psc) only
+; OVERRIDE a covered result to bare, so skimpy / bikini tops are judged correctly
+; without breaking on actors AND hasn't scanned. See IsActorNaked in slamainscr.psc.
+Bool AND_Resolved = false
+Faction AND_Nude
+Faction AND_Topless
+Keyword kwArmorCuirass
+Keyword kwClothingBody
+
+; Player-only reveal-tween state. PlayerArmorScale is the armor scale last applied
+; to the player (the tween's start point); tweenGen is bumped by any direct player
+; update (poll / heartbeat / a newer equip change) so an in-flight tween bails
+; instead of fighting it.
+Float PlayerArmorScale = 1.0
+Int tweenGen = 0
+
+; Arousal value last actually WRITTEN to the player by UpdateActor. Reported by
+; PokePlayerArousal so the MCM's check row shows the number that was applied,
+; not a second, independently-read one.
+Int PlayerLastArousal = 0
+
+Event OnInit()
+	{Fires once when the alias is first filled. Warm the sla_Framework cache
+	 eagerly so the manual OnPlayerLoadGame call from Quest.OnInit (and every
+	 subsequent use) takes the fast path. Return value discarded -- side
+	 effect (Auto property population) is what we want.}
+	GetFramework()
+EndEvent
+
+slaFrameworkScr Function GetFramework()
+	{Defensive accessor for the SLA framework script. Used in three modes:
+
+	   (1) OnInit -- warm-cache the Auto property on first-fill.
+	   (2) OnPlayerLoadGame -- double-check on every load (catches SLA reinstall
+	       / formID rewire since the cosaved Auto value was last set).
+	   (3) Call sites (OnArousalComputed scan, UpdateActor arousal read,
+	       OnPlayerLoadGame version check) -- get the framework safely. Cheap
+	       when sla_Framework is already populated (one bool check + return).
+
+	 Falls back to Quest.GetQuest("sla_Framework") if the Auto property is None
+	 -- both SLA NG / SLO Aroused NG and OSL Aroused's stub ship a quest with
+	 that editor ID, per the SLA NG readme's portable detection pattern.
+
+	 On successful fallback, populates the Auto property so subsequent calls
+	 take the fast path and the resolved value persists in the cosave for the
+	 next save load.
+
+	 Why this exists: this mod's predecessor ESP has been observed in the
+	 wild with the sla_Framework Auto property silently unwired -- callers got
+	 None from the property even when SLA was loaded and the quest was alive in
+	 memory. The dynamic lookup ignores the ESP wiring and goes straight to the
+	 named quest.}
+	If sla_Framework
+		Return sla_Framework
+	EndIf
+	sla_Framework = Quest.GetQuest("sla_Framework") as slaFrameworkScr
+	If sla_Framework
+		debug.Trace("ABM: populated sla_Framework Auto property via Quest.GetQuest fallback")
+	EndIf
+	Return sla_Framework
+EndFunction
+
+Event OnPlayerLoadGame()
+	{Checking requirements every game load. Also re-runs GetFramework to
+	 catch SLA reinstall / formID rewire since the cached Auto property was set.}
+	; Double-check the framework property on every load. If the cosaved Auto
+	; property is still valid (normal case) this is a no-op; if SLA was
+	; reinstalled with different formIDs it'll re-populate via the fallback.
+	GetFramework()
+
+	if MainQuest.DebugMode
+		debug.Notification("Aroused BodyMorphs: checking for requirements")
+		debug.Trace("ABM: checking for requirements")
+	EndIf
+
+	;Check Requirements
+	if !CheckNiOverride()
+		;NiO check fail
+		MainQuest.isNioOk = false
+		debug.Notification("Aroused BodyMorphs: NiOverride Version check failed, aborting.")
+		debug.Trace("ABM: NiOverride Version check failed, aborting.")
+		return
+	Else
+		MainQuest.isNioOk = true
+	EndIf
+
+	; Multi-fork detection via slaframeworkscr.GetVersion() (portable -- both OSL
+	; Aroused's stub framework and real SLA NG implement it). Date-stamped scheme:
+	;   OSL Aroused stub      -> 20140124   (read-only API; GetActorArousal works,
+	;                                        slaSet/ModArousalEffect ModEvents do not)
+	;   SLAXSE2022            -> 20190720   (legacy)
+	;   SexLab Aroused NG     -> >= 20200000 (NG-branded / SLO Aroused NG, packs
+	;                                         MMmmppp e.g. 30100010 for 3.1.10)
+	; The official "is this real NG?" gate per SLA NG's README is >= 20200000.
+	; This mod only consumes the read path (GetActorArousal) which is portable
+	; across forks, so legacy / stub installs still work for morph display.
+	; Defensive accessor -- GetFramework() at the top of OnPlayerLoadGame already
+	; warmed/refreshed the cache, but going through the accessor here means a
+	; mid-session re-entry (e.g. ResetAllState -> alias.OnPlayerLoadGame from the
+	; MCM thread before OnInit's cache was committed) still resolves cleanly.
+	slaFrameworkScr framework = GetFramework()
+	if !framework
+		; Both the Auto property AND the Quest.GetQuest fallback came back None.
+		; Real-world this means SexLabAroused.esm isn't loaded at all. Without it
+		; we cannot detect the fork or read arousal -- abort.
+		MainQuest.isSLAroused28 = false
+		MainQuest.isSLAroused29 = false
+		debug.Notification("Aroused BodyMorphs: SLA framework not found (Auto property unwired AND Quest.GetQuest fallback failed), aborting")
+		debug.Trace("ABM: SLA framework not found (Auto property unwired AND Quest.GetQuest fallback failed), aborting")
+		return
+	endif
+	int slaVersion = framework.GetVersion()
+
+	if slaVersion >= 20200000
+		; Real SLA NG (or compatible >= NG-class fork).
+		MainQuest.isSLAroused28 = false
+		MainQuest.isSLAroused29 = true
+	elseif slaVersion > 0
+		; OSL Aroused stub, SLAXSE2022, eXtended LE, original SSELoose, or any
+		; other pre-NG fork. Still routes through GetActorArousal so reads work.
+		MainQuest.isSLAroused28 = true
+		MainQuest.isSLAroused29 = false
+	else
+		MainQuest.isSLAroused28 = false
+		MainQuest.isSLAroused29 = false
+		debug.Notification("Aroused BodyMorphs: SexLab Aroused framework not detected (GetVersion returned " + slaVersion + "), aborting")
+		debug.Trace("ABM: SexLab Aroused framework not detected (GetVersion returned " + slaVersion + "), aborting")
+		return
+	endif
+
+	;success
+	MainQuest.ResetDefaults()
+
+	; Resolve AND factions + vanilla body keywords for the under-armor suppression.
+	; Re-run every load so an AND install/uninstall since the last save is picked up.
+	ResolveNudityDetection()
+
+	RegisterForModevent("sla_UpdateComplete", "OnArousalComputed")
+
+	RegisterForModEvent("StageStart", "OnStageStart")
+
+	; Player-only polling refresh. SLA NG only fires sla_UpdateComplete on its
+	; scheduled scan (default 120s); polling here keeps the player's morphs
+	; responsive to mid-scene arousal changes (OSL/OStim, denial ramps, etc.)
+	; without lowering SLA's global scan frequency. Skipped entirely while the
+	; mod is switched off in the MCM -- the mod event registrations above are
+	; kept (their handlers bail on the ModEnabled gate), but there is no reason
+	; to burn an OnUpdate tick every few seconds for a dormant mod.
+	Float pollInterval = MainQuest.PollInterval
+	If pollInterval > 0.0 && MainQuest.ModEnabled
+		RegisterForSingleUpdate(pollInterval)
+	EndIf
+
+	IF MainQuest.DebugMode
+		debug.Notification("Aroused BodyMorphs: requirements check successful")
+		debug.Trace("ABM: requirements check successful")
+	EndIf
+EndEvent
+
+Event OnUpdate()
+	{Player-only refresh between SLA heartbeats.}
+	If !IsActive()
+		; Switched off in the MCM, or the requirements were lost (SLA / RaceMenu
+		; uninstalled mid-save) -- stop polling. Re-armed by RestartPolling,
+		; SetModEnabled, or the next OnPlayerLoadGame.
+		return
+	EndIf
+
+	UpdateActor(Game.GetPlayer(), false)
+
+	Float pollInterval = MainQuest.PollInterval
+	If pollInterval > 0.0
+		RegisterForSingleUpdate(pollInterval)
+	EndIf
+EndEvent
+
+Function RestartPolling()
+	{Called from MCM when the user changes PollInterval. Cancels any pending tick
+	 and re-arms at the current interval so the change takes effect immediately
+	 (and so dialing 0 -> non-zero can restart a stopped poll loop).}
+	UnregisterForUpdate()
+	Float pollInterval = MainQuest.PollInterval
+	If pollInterval > 0.0 && IsActive()
+		RegisterForSingleUpdate(pollInterval)
+	EndIf
+EndFunction
+
+Bool Function IsActive()
+	{Single gate for every code path that writes morphs: the mod must be switched
+	 on in the MCM AND its requirements must be satisfied. Cheap (three property
+	 reads, && short-circuits), so it is fine to call per tick / per actor.}
+	Return MainQuest.ModEnabled && MainQuest.isNioOk && (MainQuest.isSLAroused28 || MainQuest.isSLAroused29)
+EndFunction
+
+Function SetModEnabled(Bool enabled)
+	{MCM entry point for the master on/off toggle. Owns the whole transition so the
+	 switch takes effect immediately instead of on the next heartbeat:
+
+	   off -> on : re-apply the morphs now and re-arm the poll loop.
+	   on -> off : stop the poll loop and CLEAR every morph this mod wrote, so the
+	               body snaps back to its BodySlide baseline. Leaving them frozen at
+	               the last-applied value would make "disabled" indistinguishable
+	               from "stuck", which is exactly what the toggle exists to rule out.
+
+	 Both directions cover the player AND the aroused NPCs in scan range, so the
+	 switch reads the same on everyone -- re-applying only the player would leave
+	 nearby NPCs flat until SLA's next heartbeat (up to 120s).
+
+	 tweenGen is bumped first: a reveal tween in flight (TweenPlayerReveal) would
+	 otherwise keep writing morphs for up to a second after we cleared them. The
+	 ModEnabled write happens before either branch, so SetActorMorphs' own gate
+	 also shuts out a tween that wakes up mid-transition.}
+	tweenGen += 1
+	MainQuest.ModEnabled = enabled
+	If enabled
+		Bool doDebug = MainQuest.DebugMode
+		UpdateActor(Game.GetPlayer(), doDebug)
+		UpdateNearbyActors(doDebug)
+		RestartPolling()
+	Else
+		UnregisterForUpdate()
+		ClearAllMorphs()
+	EndIf
+EndFunction
+
+Actor[] Function ScanNearbyAroused(Bool ignoreDead)
+	{The aroused NPCs around the player, or None when SLA can't be queried. Shared by
+	 the SLA heartbeat and by both directions of the master switch so the three agree
+	 on which actors count as "nearby".
+
+	 slaArousal is itself an Auto property on slaframeworkscr -- if SLA's own ESP is
+	 broken-wired the same way ours has been seen to be, this comes back None and
+	 MiscUtil.ScanCellNPCsByFaction(None, ...) is unspecified, so bail instead.}
+	slaFrameworkScr framework = GetFramework()
+	If !framework
+		Return None
+	EndIf
+	If !framework.slaArousal
+		If MainQuest.DebugMode
+			debug.Trace("ABM: framework.slaArousal is None; skipping NPC scan")
+		EndIf
+		Return None
+	EndIf
+	Return MiscUtil.ScanCellNPCsByFaction(framework.slaArousal, Game.GetPlayer(), MainQuest.ScanCellRadius, 0, 127, ignoreDead)
+EndFunction
+
+Function UpdateNearbyActors(Bool doDebug)
+	{Push morphs to the aroused NPCs in scan range. Used when the mod is switched back
+	 on, so NPCs come back at the same moment the player does.}
+	Actor[] theActors = ScanNearbyAroused(MainQuest.IgnoreDead)
+	If !theActors
+		return
+	EndIf
+	int i = 0
+	int len = theActors.length
+	While i < len
+		; Scan results can have null slots if SLA's faction-rank cache is mid-update.
+		If theActors[i]
+			UpdateActor(theActors[i], doDebug)
+		EndIf
+		i += 1
+	EndWhile
+EndFunction
+
+Function ClearActorMorphs(Actor who)
+	{Drop every morph registered under our NIO key for this actor and push the model
+	 update. Only our key is touched, so morphs owned by other mods (or the user's
+	 own RaceMenu sliders) survive untouched.}
+	If !who
+		return
+	EndIf
+	NiOverride.ClearBodyMorphKeys(who, NIO_KEY)
+	NiOverride.UpdateModelWeight(who)
+EndFunction
+
+Function ClearAllMorphs()
+	{Remove this mod's morphs from the player and from the aroused NPCs currently in
+	 scan range. Used when the mod is switched off in the MCM.
+
+	 The isNioOk bail is not just an optimisation: the master toggle is deliberately
+	 never greyed out (it has to stay usable to get back out of the disabled state),
+	 so it can be clicked on an install with no SKEE at all -- where these natives
+	 have no implementation to bind to. Nothing was ever written in that state, so
+	 there is nothing to clear.
+
+	 IgnoreDead is deliberately false here (unlike the heartbeat scan): a corpse that
+	 was morphed while alive still carries our morphs and should be cleaned up too.
+	 NPCs outside ScanCellRadius keep their last morph values until they come back
+	 into range with the mod re-enabled -- unavoidable without a global actor sweep,
+	 and called out in the MCM info text.}
+	PlayerArmorScale = 1.0
+	PlayerLastArousal = 0
+	If !MainQuest.isNioOk
+		return
+	EndIf
+	ClearActorMorphs(Game.GetPlayer())
+
+	Actor[] theActors = ScanNearbyAroused(false)
+	If !theActors
+		return
+	EndIf
+	int i = 0
+	int len = theActors.length
+	While i < len
+		If theActors[i]
+			ClearActorMorphs(theActors[i])
+		EndIf
+		i += 1
+	EndWhile
+EndFunction
+
+Int Function PokePlayerArousal()
+	{MCM helper for the "Player arousal" row: re-apply the player's morphs right now
+	 and report what was written. Returns the arousal actually applied (0..100), or a
+	 negative sentinel the MCM renders as its own label:
+	   -1  SLA framework unavailable (nothing to read).
+	   -2  UpdateActor declined to write -- the actor filters excluded the player
+	       (male PC with Ignore males on, dead, etc). Reporting an arousal number
+	       here would be a false pass: no morphs were applied.
+	   -3  The mod is switched off in the MCM ("Mod enabled"), so nothing is written
+	       by design.
+	 The returned value is the one UpdateActor wrote (via PlayerLastArousal), not a
+	 second independent GetActorArousal read, so the row can't disagree with the body.}
+	If !MainQuest.ModEnabled
+		Return -3
+	EndIf
+	If !GetFramework()
+		Return -1
+	EndIf
+	If !UpdateActor(Game.GetPlayer(), MainQuest.DebugMode)
+		Return -2
+	EndIf
+	Return PlayerLastArousal
+EndFunction
+
+Bool Function CheckNiOverride()
+	Return SKSE.GetPluginVersion("skee") >= SKEE_VERSION && NiOverride.GetScriptVersion() >= NIOVERRIDE_SCRIPT_VERSION
+EndFunction
+
+Function ResolveNudityDetection()
+	{Resolve the Advanced Nudity Detection factions (top-nudity integration) and
+	 the vanilla body keywords (no-AND fallback). Called from OnPlayerLoadGame on
+	 every load so an AND install/uninstall since the last save is reflected.
+
+	 The AND formIDs (0x831 Nude, 0x832 Topless) and ESP name match what SLA NG
+	 itself resolves in slamainscr.psc -- AND owns these factions, not SLA, so we
+	 can read them directly regardless of which SLA fork is installed.}
+	AND_Resolved = false
+	AND_Nude = None
+	AND_Topless = None
+	If Game.GetModByName("Advanced Nudity Detection.esp") != 255
+		AND_Nude    = Game.GetFormFromFile(0x831, "Advanced Nudity Detection.esp") as Faction
+		AND_Topless = Game.GetFormFromFile(0x832, "Advanced Nudity Detection.esp") as Faction
+		AND_Resolved = (AND_Nude != None) || (AND_Topless != None)
+		If MainQuest.DebugMode
+			debug.Trace("ABM: Advanced Nudity Detection found, top-nudity gating enabled")
+		EndIf
+	EndIf
+	kwArmorCuirass = Keyword.GetKeyword("ArmorCuirass")
+	kwClothingBody = Keyword.GetKeyword("ClothingBody")
+EndFunction
+
+Bool Function IsTopCovered(Actor who)
+	{True when the actor's chest is covered, so nipple/areola morphs should be
+	 scaled down (prevents clipping through tops).
+
+	 Mirrors SexLab Aroused's own naked test (slamainscr.IsActorNaked): the vanilla
+	 ArmorCuirass / ClothingBody worn-keyword check is primary, and Advanced Nudity
+	 Detection only OVERRIDES a "covered" result to bare. We deliberately do NOT make
+	 AND the sole authority: AND's NPC factions are only populated by its periodic,
+	 player-cast NPCScanSpell (MCM-gated via ScanNPC), so an unscanned / out-of-range
+	 / just-stripped NPC has no Topless rank yet -- trusting AND alone would suppress
+	 morphs on a genuinely naked NPC (e.g. mid-scene). The keyword check is per-actor
+	 and immediate, so bare actors always show regardless of AND's scan coverage.
+
+	 Reading the faction rank is cheap (a rank lookup); we never call SLA's expensive
+	 IsActorNaked(). Naked-body armors / SOS carry neither keyword, so they read bare.}
+	; No top worn at all -> bare chest. True for every actor with no dependency on
+	; AND having scanned them.
+	If !(who.WornHasKeyword(kwArmorCuirass) || who.WornHasKeyword(kwClothingBody))
+		Return false
+	EndIf
+	; A top is worn. Let AND override to "bare" for skimpy / bikini / transparent
+	; tops that still carry a cuirass keyword but expose the chest.
+	If AND_Resolved
+		If (AND_Nude && who.GetFactionRank(AND_Nude) == 1) || (AND_Topless && who.GetFactionRank(AND_Topless) == 1)
+			Return false
+		EndIf
+	EndIf
+	Return true
+EndFunction
+
+Event OnObjectEquipped(Form akBaseObject, ObjectReference akReference)
+	{Player put something on -- suppress immediately (snap, no ease) so the chest
+	 morphs collapse before anything can clip during a redress.}
+	RefreshOnArmorChange(akBaseObject, false)
+EndEvent
+
+Event OnObjectUnequipped(Form akBaseObject, ObjectReference akReference)
+	{Player took something off -- if that bares the chest, ease the morphs back in.}
+	RefreshOnArmorChange(akBaseObject, true)
+EndEvent
+
+Function RefreshOnArmorChange(Form akBaseObject, Bool wasRemoved)
+	{Player-only morph refresh when armor is equipped/unequipped. Gated on the same
+	 requirements as the poll loop so we never poke NiOverride when the mod is
+	 non-functional. With AND, a top change can come from many slots, so we react to
+	 any worn armor (after a short settle so AND updates its factions first); without
+	 AND only body-slot (32) armor can change the covered state.
+
+	 Removing armor that leaves the chest bare eases the morphs in over ~1s
+	 (TweenPlayerReveal); every other case snaps via UpdateActor -- notably equipping,
+	 so nipples flatten instantly rather than poking through a redress.}
+	If !MainQuest.SuppressUnderArmor
+		return
+	EndIf
+	If !IsActive()
+		return
+	EndIf
+	Armor armo = akBaseObject as Armor
+	If !armo
+		return
+	EndIf
+	If !AND_Resolved && !Math.LogicalAnd(armo.GetSlotMask(), 0x04)
+		; Without AND, only body-slot (32) armor can change the covered state.
+		return
+	EndIf
+	If AND_Resolved
+		Utility.Wait(0.3)  ; let AND update its nudity factions first
+	EndIf
+
+	If wasRemoved && !IsTopCovered(Game.GetPlayer())
+		TweenPlayerReveal()
+	Else
+		UpdateActor(Game.GetPlayer(), MainQuest.DebugMode)
+	EndIf
+EndFunction
+
+Event OnArousalComputed(string eventName, string argString, float argNum, form sender)
+	{SLA broadcast at the end of each scan tick. Refresh the player, then any nearby aroused NPCs.}
+	If !MainQuest.ModEnabled
+		; Switched off in the MCM. The mod event registration is only (re)made on
+		; game load, not on the toggle, so the gate lives here.
+		return
+	EndIf
+	bool doDebug = MainQuest.DebugMode
+	If doDebug
+		debug.Notification("Aroused BodyMorphs: Arousal event")
+		debug.Trace("ABM: Arousal event")
+	EndIf
+
+	UpdateActor(Game.GetPlayer(), doDebug)
+
+	If argNum <= 0
+		If doDebug
+			debug.Notification("Aroused BodyMorphs: No aroused NPCs nearby, updating player only")
+			debug.Trace("ABM: No aroused NPCs nearby, updating player only")
+		EndIf
+		return
+	EndIf
+
+	; ScanNearbyAroused re-resolves the framework defensively (mid-session SLA
+	; reinstall, cosmetically unwired Auto property) and returns None if SLA
+	; can't be queried at all -- skip the tick rather than poke PapyrusUtil
+	; with a null faction.
+	Actor[] theActors = ScanNearbyAroused(MainQuest.IgnoreDead)
+	If !theActors
+		return
+	EndIf
+	; theActors can have null slots if SLA's faction-rank cache is mid-update.
+	int i = 0
+	int len = theActors.length
+	While i < len
+		If theActors[i]
+			UpdateActor(theActors[i], doDebug)
+		EndIf
+		i += 1
+	EndWhile
+
+	If doDebug
+		debug.Notification("Aroused BodyMorphs: Arousal event end")
+		debug.Trace("ABM: Arousal event end")
+	EndIf
+endEvent
+
+Bool Function UpdateActor(Actor who, bool doDebug=false, int modifier=0)
+	{Set morphs of "who" according to their arousal, offset by "modifier".
+
+	 Returns true when morphs were actually written, false on every bail-out
+	 (null actor, no ActorBase, excluded by an Ignore filter, no SLA framework).
+	 Callers that just want the side effect can discard it; PokePlayerArousal
+	 uses it so the MCM check row can't report a pass on a skipped actor.}
+	If !who
+		; Callers (OnArousalComputed, OnStageStart) guard their array entries,
+		; but the debug spell's crosshair fallback and any third-party script
+		; that ends up here can still pass None. Bail rather than null-deref.
+		return false
+	EndIf
+	If !MainQuest.ModEnabled
+		; Master switch off. Belt and braces: the event handlers already bail, but
+		; the debug spell and any third-party caller reach UpdateActor directly.
+		return false
+	EndIf
+	ActorBase whoBase = who.GetLeveledActorBase()
+	If !whoBase
+		; LeveledActorBase can return None for actors in unusual states (e.g.
+		; mid-spawn). No way to filter by sex / IsDead without it -- skip.
+		return false
+	EndIf
+	; ActorBase.GetSex() encodes both gender and creature-ness:
+	;   0 = male NPC, 1 = female NPC, 2 = male creature, 3 = female creature.
+	; This lets us split the "Ignore Males" (humanoid) and "Ignore Beast"
+	; (creature) filters without needing a keyword lookup.
+	int sex = whoBase.GetSex()
+	String skipReason = ""
+	If MainQuest.IgnoreMales && sex == 0
+		skipReason = "is male"
+	ElseIf MainQuest.IgnoreMaleBeast && sex == 2
+		skipReason = "is male beast"
+	ElseIf MainQuest.IgnoreFemaleBeast && sex == 3
+		skipReason = "is female beast"
+	ElseIf MainQuest.IgnoreDead && who.IsDead()
+		; Dead NPCs are already filtered out at the OnArousalComputed cell-scan
+		; level (we pass IgnoreDead into ScanCellNPCsByFaction), but the player
+		; poll and the debug spell can still hit this path with a corpse target,
+		; so we re-check here.
+		skipReason = "is dead"
+	EndIf
+	If skipReason != ""
+		If doDebug
+			debug.Notification("Aroused BodyMorphs: "+whoBase.GetName()+" "+skipReason+", skipping")
+			debug.Trace("ABM: "+whoBase.GetName()+" "+skipReason+", skipping")
+		EndIF
+		return false
+	EndIf
+
+	; Portable per-actor arousal read (works on SLA NG, SLO, OSL Aroused, eXtended).
+	; GetActorArousal -> slaInternalModules.GetArousal(who), which triggers a fresh
+	; recalculation rather than returning the cached faction-rank that SLA only
+	; refreshes on its scan tick. Already clamped to [0,100] by GetActorArousal.
+	; Defensive accessor: GetFramework() normally just returns the cached
+	; sla_Framework Auto property (warmed in OnInit / OnPlayerLoadGame), but
+	; falls back to Quest.GetQuest if the property somehow became None at
+	; runtime. Cheap when the cache is valid -- one bool check + return.
+	slaFrameworkScr framework = GetFramework()
+	If !framework
+		If doDebug
+			debug.Notification("Aroused BodyMorphs: "+whoBase.GetName()+" -- SLA framework unavailable, skipping")
+			debug.Trace("ABM: "+whoBase.GetName()+" -- SLA framework unavailable, skipping")
+		EndIf
+		return false
+	EndIf
+	int Arousal = framework.GetActorArousal(who) + modifier
+	If Arousal > 100
+		Arousal = 100
+	ElseIf Arousal < 0
+		Arousal = 0
+	EndIf
+
+	; Under-armor suppression. When the chest is covered, scale every morph by
+	; UnderArmorScale (0.0 = flat, no clip; 1.0 = full) so fitted nipples don't
+	; poke through tops. IsTopCovered prefers Advanced Nudity Detection's
+	; Topless/Nude state, falling back to the vanilla worn-keyword check.
+	Float armorScale = 1.0
+	If MainQuest.SuppressUnderArmor && IsTopCovered(who)
+		armorScale = MainQuest.UnderArmorScale
+		If doDebug
+			debug.Notification("Aroused BodyMorphs: "+whoBase.GetName()+" chest covered, scaling morphs x"+armorScale)
+			debug.Trace("ABM: "+whoBase.GetName()+" chest covered, scaling morphs x"+armorScale)
+		EndIf
+	EndIf
+
+	SetActorMorphs(who, Arousal, armorScale, doDebug)
+
+	; Track the player's last-applied scale (the reveal tween's start point) and
+	; arousal (reported by PokePlayerArousal), and cancel any in-flight tween --
+	; a direct update supersedes it.
+	If who == Game.GetPlayer()
+		PlayerArmorScale = armorScale
+		PlayerLastArousal = Arousal
+		tweenGen += 1
+	EndIf
+	return true
+EndFunction
+
+Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
+	{Write every morph = maxValue * arousal/100 * scale, then push the model update.
+	 Shared by UpdateActor (a single snap) and TweenPlayerReveal (one step of the
+	 reveal ease). Iterates the morph table until the first empty slot; honours
+	 imported counts up to 128. Papyrus && short-circuits, so MorphNames[j] is not
+	 read once j hits 128.
+
+	 The ModEnabled check is here, at the single point where morphs are written,
+	 because every external call in this file unlocks the script: the MCM thread can
+	 enter SetModEnabled part-way through a tween step and clear the morphs, and
+	 without this gate the rest of the step would paint them straight back on.}
+	If !MainQuest.ModEnabled
+		return
+	EndIf
+	String[] morphNames = MainQuest.MorphNames
+	Float[]  maxValues  = MainQuest.MaxValue
+	int j = 0
+	while j < 128 && morphNames[j] != ""
+		float Value = maxValues[j] * arousal / 100 * scale
+		NiOverride.SetBodyMorph(who, morphNames[j], NIO_KEY, Value)
+		If doDebug
+			debug.Notification("Aroused BodyMorphs: setting "+morphNames[j]+" to "+Value)
+			debug.Trace("ABM: setting "+morphNames[j]+" to "+Value)
+		EndIf
+		j += 1
+	EndWhile
+	NiOverride.UpdateModelWeight(who)
+EndFunction
+
+Function TweenPlayerReveal()
+	{Gradually grow the player's morphs from the currently-applied armor scale up to
+	 the now-uncovered target over ~1s, for a smooth reveal when body armor is
+	 removed. Player-only. Arousal is read once and held constant across the short
+	 tween. Overlap-guarded: bumps tweenGen and bails if a newer update (another
+	 equip change, the poll, or the heartbeat) supersedes it mid-ease.}
+	If !IsActive()
+		; RefreshOnArmorChange checked this too, but it then waits 0.3s for Advanced
+		; Nudity Detection -- long enough for the master switch to be flipped off in
+		; between. Without this the tween would claim tweenGen (so SetModEnabled's
+		; bump can't stop it) and re-apply morphs a second after they were cleared.
+		return
+	EndIf
+	Actor player = Game.GetPlayer()
+	If !player
+		return
+	EndIf
+
+	; Target scale after the armor change (1.0 = bare; still-covered -> no reveal).
+	Float target = 1.0
+	If MainQuest.SuppressUnderArmor && IsTopCovered(player)
+		target = MainQuest.UnderArmorScale
+	EndIf
+	Float from = PlayerArmorScale
+	If target == from
+		; Already at the target (e.g. was never suppressed) -- nothing to animate.
+		return
+	EndIf
+
+	slaFrameworkScr framework = GetFramework()
+	If !framework
+		return
+	EndIf
+	Int arousal = framework.GetActorArousal(player)
+	If arousal > 100
+		arousal = 100
+	ElseIf arousal < 0
+		arousal = 0
+	EndIf
+
+	; Claim this tween; a newer one (or any UpdateActor on the player) will bump
+	; tweenGen and make the myGen check below fail, so this loop stops cleanly.
+	tweenGen += 1
+	Int myGen = tweenGen
+
+	Int steps = 10
+	Int s = 1
+	While s <= steps && myGen == tweenGen
+		Float f = from + (target - from) * s / steps
+		SetActorMorphs(player, arousal, f)
+		PlayerArmorScale = f
+		Utility.Wait(0.1)
+		s += 1
+	EndWhile
+
+	; Pin the exact target if we ran to completion (weren't superseded).
+	If myGen == tweenGen
+		SetActorMorphs(player, arousal, target)
+		PlayerArmorScale = target
+	EndIf
+EndFunction
+
+Event OnStageStart(string eventName, string argString, float argNum, form sender)
+	{SexLab animation stage hook: bump every scene actor's morphs by +50 arousal
+	 for the duration of the stage, so bodies visibly react mid-scene.}
+	If !MainQuest.ModEnabled
+		return
+	EndIf
+	Actor[] actorList = SexLabQuestFramework.HookActors(argString)
+	If !actorList
+		return
+	EndIf
+	int len = actorList.length
+	If len < 1
+		return
+	EndIf
+
+	Utility.Wait(1)
+	;giving Aroused time to do its thing.
+
+	bool doDebug = MainQuest.DebugMode
+	int i = 0
+	While i < len
+		; HookActors can hand back arrays with null slots if SexLab's hook list
+		; is mid-update; guard each entry rather than null-deref in UpdateActor.
+		If actorList[i]
+			UpdateActor(actorList[i], doDebug, 50)
+		EndIf
+		i += 1
+	EndWhile
+EndEvent

@@ -1,0 +1,77 @@
+<?xml version='1.0'?>
+<PapyrusProject xmlns="PapyrusProject.xsd"
+    Flags="TESV_Papyrus_Flags.flg"
+    Game="sse"
+    Output="dist\scripts"
+    Optimize="false"
+    Release="false"
+    Zip="true"
+    Package="false"
+    Final="false">
+    <Variables>
+        <!-- Set the name of your mod: -->
+        <Variable Name="ModName" Value="ArousedBodyMorphs" />
+        <!-- The folder where you store all of your mods -->
+        <Variable Name="ModsFolder" Value="C:\Playground\Skyrim\mods" />
+        <!-- Optional folder with additional source code for imports -->
+        <Variable Name="ImportsFolder" Value=".\dist\source" />
+    </Variables>
+    <Imports>
+        <!-- This mod's own sources -->
+        <Import>.\dist\source\scripts</Import>
+        <!-- SexLab Aroused NG (provides slaMainScr, slaFrameworkScr, slaConfigScr) -->
+        <Import>C:\Playground\Skyrim\mods\SKSE\SexlabArousedNG\dist\Core\Source\Scripts</Import>
+        <!-- SexLab Framework (provides SexLabFramework) -->
+        <Import>C:\Playground\Skyrim\mods\build\Sexlab\scripts\Source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\SexLab Framework PPLUS - V2.15.6\Source\Scripts</Import>
+        <!-- SkyUI MCM (provides SKI_ConfigBase) -->
+        <Import>C:\Playground\Skyrim\mods\build\SkyUI_5.1_SDK\Scripts\Source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\skyui-master\dist\Data\Scripts\Source</Import>
+        <!-- PapyrusUtil (provides JsonUtil, MiscUtil) -->
+        <Import>C:\Playground\Skyrim\mods\build\PapyrusUtil\Source\Scripts</Import>
+        <!-- RaceMenu / NiOverride (BodyMorph API, StringUtil ships with SKSE sources here) -->
+        <Import>C:\Playground\Skyrim\mods\build\racemenu\scripts\source</Import>
+        <!-- Misc framework imports kept for compatibility with shared utility scripts -->
+        <Import>C:\Playground\Skyrim\mods\build\FNIS Behavior SE 7.6\Data\source\scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\FNIS Sexy Move SE 7.2\Data\Source\Scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\Stress And Trauma SE v1.0\scripts\source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\SexLab Separate Orgasm\Scripts\Source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\OStim Standalone\Scripts\Source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\Apropos2\Scripts\Source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\SlaveTats-1.3.0-beta-2 SE\Source\Scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\ConsoleUtil</Import>
+        <Import>C:\Playground\Skyrim\mods\build\XP32 Maximum Skeleton Special Extended 4.67\Character Creation\MCM\assets\scripts\source</Import>
+        <Import>C:\Playground\Skyrim\mods\build\ZaZ Animation Pack</Import>
+        <Import>C:\Playground\Skyrim\mods\build\iwantWidgets\Source\Scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\iwantstatusbars\Source\Scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\Devious Devices SE 5.2\90 Source Scripts\Scripts\Source</Import>
+        <Import>C:\Playground\PapyrusExtenderSSE\Papyrus\Source\scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\JContainers SE\Data\scripts\source</Import>
+        <Import>C:\Playground\Skyrim\mods\SKSE\DynamicExpressionReplacer\dist\Source\Scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\Scripts\Source\Scripts</Import>
+        <Import>C:\Playground\Skyrim\mods\build\SexLab Inflation Framework\Scripts\Source</Import>
+    </Imports>
+    <Folders>
+        <!-- Relative path to folder containing .psc Papyrus source code files for this project -->
+        <Folder>.\dist\source\scripts</Folder>
+    </Folders>
+    <!-- The following section is for .bsa archives. Enable by setting Package="true" in the PapyrusProject. -->
+    <Packages Output=".">
+        <Package Name="@ModName" RootDir=".\dist">
+            <Match In="scripts">*.pex</Match>
+        </Package>
+    </Packages>
+    <!-- The following section is for .zip archive. Enable by setting Zip="true" in the PapyrusProject.
+         The zip is the installable mod: everything under dist\ at its root. -->
+    <ZipFiles Output=".\Release">
+        <ZipFile Name="@ModName" RootDir=".\dist" Compression="deflate">
+            <Include>ArousedBodyMorphs.esp</Include>
+            <Include>ReadMe_ArousedBodyMorphs.txt</Include>
+            <!-- Compiled Papyrus scripts -->
+            <Match In="scripts">*.pex</Match>
+            <Match In="SKSE">*</Match>
+            <!-- Papyrus source scripts -->
+            <Match In="source\scripts">*.psc</Match>
+        </ZipFile>
+    </ZipFiles>
+</PapyrusProject>
