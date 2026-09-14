@@ -47,8 +47,9 @@ Features
   Detection aware
 - Actor filters: ignore males / dead / male beasts / female beasts;
   NPC scan radius (0 = player only)
-- Translatable MCM: Interface\Translations\ArousedBodyMorphs_<LANGUAGE>.txt
-  (English shipped for all 10 languages; drop in a translated file to replace)
+- Translated MCM in 10 languages: English, Chinese, Czech, French, German,
+  Italian, Japanese, Polish, Russian, Spanish. The game's language picks the
+  file automatically.
 - Import/Export of all settings + the morph table via JSON
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
 - Debug mode with a lesser power that dumps an actor's morph state to the
@@ -60,6 +61,23 @@ Features
   MCM Requirements section shows which mode is active.
   Known difference in native mode: armor removal snaps to the bare state
   instantly -- the ~1s reveal ease is Papyrus-mode only for now.
+
+
+Translations
+-----------
+Interface\Translations\ArousedBodyMorphs_<LANGUAGE>.txt, one file per language.
+The non-English files are machine-assisted translations that have not been
+reviewed by native speakers -- corrections are very welcome, and fixing one is
+just editing one file, no scripts involved.
+
+If you edit or add one, two rules matter:
+- Save as UTF-16 LE WITH BOM, tab between the $key and the text. Saving as
+  UTF-8 is the usual reason a translation silently does not load.
+- SkyUI only substitutes when the WHOLE string matches a key, and some names
+  must stay exactly as they are: SexLab Aroused, RaceMenu, NiOverride, SKEE,
+  SKSE, BodySlide, MCM, Papyrus, config.json, morph.json, the preset names
+  (Minimal / Natural / Noticeable / Exaggerated -- these are also filenames),
+  and NippleSize, which is a slider label shown elsewhere in the menu.
 
 
 Credits

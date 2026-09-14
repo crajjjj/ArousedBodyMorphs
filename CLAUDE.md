@@ -193,7 +193,14 @@ the effect to be visible in-game (user-side concern, not a code concern).
 ## Code Conventions
 
 - Papyrus source: `dist\source\scripts\*.psc`. Compiled: `dist\scripts\*.pex`. Both folders are flat — no subdirectories.
-- Keep edits ASCII unless the file already contains non-ASCII.
+- Keep edits ASCII unless the file already contains non-ASCII. `dist\Interface  Translations\*.txt` are the deliberate exception: they are UTF-16 LE **with
+  BOM**, CRLF, `$key<TAB>text`, and carry real diacritics / Cyrillic / CJK.
+  `.gitattributes` marks them `-text` so no line-ending conversion touches them.
+  The filename stem is the **plugin** name (`ArousedBodyMorphs`), NOT the MCM's
+  `ModName` -- SkyUI keys the lookup off the data file. Every language file must
+  hold the identical key set; SkyUI only substitutes on a WHOLE-string match, so
+  a label built by concatenation (title + version, the morph count) cannot be
+  translated and is deliberately left literal.
 - Runtime JSON (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`) lives in `Data\SKSE\Plugins\StorageUtilData\` — the shipped copies under `dist\SKSE\` are the install defaults. All values stored as strings; readers cast to `int`/`float`, writers must do `(value as int) as string` explicitly.
 - Preset/morph JSON keys use the EXACT morph names from `ABM_Quest.FullMorphSet()` (mixed case) — no normalization layer exists; keep them in sync.
 - JsonUtil API quick-reference: `StringListClear/Count/Get/Add(file, listKey, ...)`, `GetStringValue(file, key, missing)` (third arg positional), `SetStringValue(file, key, value)`.
