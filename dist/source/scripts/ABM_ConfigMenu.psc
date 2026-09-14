@@ -575,6 +575,13 @@ Event OnOptionSliderAccept(Int option, Float value)
 		; Turning NPCs off: sweep at the OLD radius first, or everyone already
 		; morphed freezes at their last values with nothing left to update them.
 		If value <= 0.0 && oldRadius > 0.0
+			; Push BEFORE clearing, exactly as SetModEnabled does. The DLL's
+			; heartbeat sink gates on the radius it was last given, and the
+			; normal push only happens on MCM close -- so without this, a
+			; sla_UpdateComplete landing while the menu is still open would
+			; re-morph everyone we just cleared, and the later push of 0 would
+			; then strand them there permanently.
+			MainQuest.PlayerAlias.PushConfigToNative()
 			MainQuest.PlayerAlias.ClearNearbyMorphsAt(oldRadius)
 		EndIf
 		return
