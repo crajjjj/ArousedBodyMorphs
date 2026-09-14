@@ -16,6 +16,32 @@ If the user asks how to build, they use `PapyrusCompiler.exe` with
 `.pex` output to `dist\scripts\` and produces a release zip under `Release\`
 (zip root = `dist\`) when `Zip="true"`.
 
+The same applies to the native DLL: edit C++ under `native\src\` and stop —
+the user builds it (`cd native && xmake f -m release && xmake`; deploys to
+`dist\SKSE\Plugins`). Only build when explicitly asked.
+
+## Native layer (`native\`, optional ArousedBodyMorphs.dll)
+
+Event-driven replacement for the Papyrus update pipeline; see
+[native/README.md](native/README.md). Key invariants:
+
+- Backends resolved at runtime, never linked: `SexlabArousedNG.dll` →
+  `SLA_GetArousalInt` (C API; poll + `sla_UpdateComplete` sweep), or
+  `OSLAroused.dll` → `GetArousalExt` + `OSLA_ActorArousalUpdated` mod events
+  (fully event-driven). Neither present → DLL idles, Papyrus path runs.
+- Morph writes via SKEE's `IBodyMorphInterface` (messaging handshake to
+  "skee"), same NIO key `ArousedBodyMorphs.esp` as the Papyrus path.
+- Papyrus is the settings owner: `ABM_PlayerAlias.PushConfigToNative()`
+  mirrors options + morph table into the DLL (called from OnPlayerLoadGame,
+  SetModEnabled, RestartPolling, MCM OnConfigClose). The DLL persists nothing.
+- **Every `ABM_Native.*` call in Papyrus must be gated** by
+  `ABM_Native.IsInstalled()` (SKSE plugin query) — the natives are unbound
+  without the DLL. `ABM_PlayerAlias.NativeActive()` is the combined gate; all
+  Papyrus pipeline paths (poll, heartbeat, armor events, UpdateActor) stand
+  down when it is true.
+- CommonLibSSE-NG vendored as submodule at `native\lib\commonlibsse-ng`
+  (alandtse fork, `ng` branch, currently v8.0.1).
+
 ## Bumping the Version
 
 Three places hold the version — keep in sync:
@@ -33,10 +59,11 @@ untagged version).
 dist\ArousedBodyMorphs.esp       Plugin (ESL-flagged ESP, records 0x800-0x803)
 dist\ReadMe_ArousedBodyMorphs.txt User-facing readme + changelog
 dist\meta.ini                    Mod Organizer 2 metadata
-dist\source\scripts\*.psc        Papyrus source (4 scripts)
+dist\source\scripts\*.psc        Papyrus source (5 scripts)
 dist\scripts\*.pex               Compiled bytecode
 dist\SKSE\...\ArousedBodyMorphs\ Intensity presets + sample morph.json
 skyrimse.ppj                     Papyrus project (compile + zip config)
+native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 ```
 
 ### Scripts
@@ -47,6 +74,7 @@ skyrimse.ppj                     Papyrus project (compile + zip config)
 | `ABM_PlayerAlias` | `ReferenceAlias` on the player. Detects NiOverride/SKEE, identifies the SLA flavor, runs `UpdateActor()` to push BodyMorph values, owns the player poll, under-armor suppression and the reveal tween. NIO key is `"ArousedBodyMorphs.esp"`. |
 | `ABM_ConfigMenu` | SkyUI MCM (two pages: General / Morphs). Morphs page groups sliders by area (Nipples / Areolas / Vagina / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
 | `ABM_DebugSpellEffect` | Lesser-power magic effect. Dumps actor base + morph values to the Papyrus log, forces `UpdateActor()`, dumps again. |
+| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled` gate + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`). No form binding — not in the ESP. |
 
 ### ESP records (all defined by this plugin, ESL range)
 

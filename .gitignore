@@ -1,2 +1,6 @@
 Release/
 *.zip
+native/build/
+native/.xmake/
+native/vs/
+native/compile_commands.json

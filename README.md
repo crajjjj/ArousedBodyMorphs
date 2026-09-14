@@ -20,6 +20,10 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 - JSON import/export of settings and custom morph tables — imported morphs are
   auto-grouped by name
 - Debug lesser power that dumps an actor's morph state to the Papyrus log
+- **Optional native SKSE layer** ([native/](native/)): event-driven updates via
+  OSL Aroused's per-actor arousal events or SLA NG's C API, with all morph
+  writes batched through SKEE's native interface — the Papyrus pipeline stays
+  as the fallback for legacy SLA forks or DLL-less installs
 
 ## Requirements
 
@@ -39,6 +43,8 @@ dist/                 The installable mod (MO2-ready): ESP, scripts, JSON preset
   SKSE/...            Intensity presets + sample morph.json
 skyrimse.ppj          Papyrus project: compiles dist/source → dist/scripts and
                       zips dist/ into Release/ArousedBodyMorphs.zip
+native/               Optional SKSE DLL (xmake + CommonLibSSE-NG submodule);
+                      builds ArousedBodyMorphs.dll into dist/SKSE/Plugins
 ```
 
 Build with [Pyro] or any PapyrusCompiler front end using `skyrimse.ppj` (import

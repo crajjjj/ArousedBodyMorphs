@@ -52,6 +52,11 @@ Features
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
 - Debug mode with a lesser power that dumps an actor's morph state to the
   Papyrus log
+- Optional native SKSE layer (ArousedBodyMorphs.dll): with SexLab Aroused NG
+  or OSL Aroused installed, updates become event-driven / natively polled and
+  all morph writes go through SKEE directly -- much lower script load. Without
+  the DLL (or on legacy SLA forks) the Papyrus pipeline runs as before. The
+  MCM Requirements section shows which mode is active.
 
 
 Credits
@@ -72,3 +77,6 @@ Changelog
   - Master switch, player poll, under-armor suppression + reveal tween,
     Advanced Nudity Detection top-nudity gating, actor filters, intensity
     presets, import/export, debug spell, multi-fork SLA detection.
+  - Optional native SKSE layer: event-driven updates on OSL Aroused
+    (OSLA_ActorArousalUpdated), native poll + heartbeat sweep on SLA NG
+    (C API), SKEE-direct morph writes; Papyrus fallback for legacy forks.

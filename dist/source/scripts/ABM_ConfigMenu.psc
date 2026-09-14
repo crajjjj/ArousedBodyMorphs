@@ -130,6 +130,9 @@ Function RefreshReqFlag()
 EndFunction
 
 Event OnConfigClose()
+	; Mirror whatever changed this session into the optional native DLL (single
+	; push here instead of one per option handler). No-op without the DLL.
+	MainQuest.PlayerAlias.PushConfigToNative()
 	if toggleDebugSpell
 		if MainQuest.DebugMode
 			Game.GetPlayer().addSpell(DebugSpell)
@@ -203,6 +206,13 @@ Function DrawGeneralPage()
 		slaLabel = "OK - Legacy / OSL stub"
 	EndIf
 	AddTextOption("SexLab Aroused", slaLabel, OPTION_FLAG_DISABLED)
+	; Optional native layer status. Without the DLL the row says so and the
+	; Papyrus pipeline (this file's siblings) does all the work.
+	String nativeLabel = "not installed - Papyrus mode"
+	If ABM_Native.IsInstalled()
+		nativeLabel = ABM_Native.GetBackendName()
+	EndIf
+	AddTextOption("Native engine (SKSE DLL)", nativeLabel, OPTION_FLAG_DISABLED)
 	; Live sanity check: click to read arousal fresh from SLA and re-apply morphs
 	; (PokePlayerArousal on the alias).
 	AddTextOptionST("State_CheckPlayer", "Player arousal", "Check now", reqOnlyFlag)

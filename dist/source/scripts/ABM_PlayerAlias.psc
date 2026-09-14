@@ -47,6 +47,29 @@ Event OnInit()
 	GetFramework()
 EndEvent
 
+Bool Function NativeActive()
+	{True when the OPTIONAL ArousedBodyMorphs.dll is installed AND it detected a
+	 native arousal backend (SLA NG's C API / OSL Aroused's exports) plus SKEE.
+	 In that state the DLL owns the whole update pipeline -- event-driven
+	 per-actor refreshes, the player poll, armor-change refreshes, morph writes
+	 -- and every Papyrus pipeline path here stands down. Without the DLL (or on
+	 a legacy Papyrus-only SLA fork) this is false and nothing changes.
+	 && short-circuits, so the native call is never made when the DLL is absent.}
+	Return ABM_Native.IsInstalled() && ABM_Native.IsActive()
+EndFunction
+
+Function PushConfigToNative()
+	{Mirror the quest's option block + morph table into the native DLL. The MCM
+	 stays the single source of truth; this is called on every load, from
+	 SetModEnabled / RestartPolling, and when the MCM closes, so the DLL always
+	 works from current values. No-op without the DLL.}
+	If !ABM_Native.IsInstalled()
+		return
+	EndIf
+	ABM_Native.PushConfig(MainQuest.ModEnabled, MainQuest.IgnoreMales, MainQuest.IgnoreDead, MainQuest.IgnoreMaleBeast, MainQuest.IgnoreFemaleBeast, MainQuest.SuppressUnderArmor, MainQuest.UnderArmorScale, MainQuest.PollInterval, MainQuest.ScanCellRadius, MainQuest.DebugMode)
+	ABM_Native.PushMorphTable(MainQuest.MorphNames, MainQuest.MaxValue)
+EndFunction
+
 slaFrameworkScr Function GetFramework()
 	{Defensive accessor for the SLA framework script. Used in three modes:
 
@@ -159,15 +182,19 @@ Event OnPlayerLoadGame()
 
 	RegisterForModEvent("StageStart", "OnStageStart")
 
+	; Hand the current settings to the optional native DLL (no-op without it).
+	PushConfigToNative()
+
 	; Player-only polling refresh. SLA NG only fires sla_UpdateComplete on its
 	; scheduled scan (default 120s); polling here keeps the player's morphs
 	; responsive to mid-scene arousal changes (OSL/OStim, denial ramps, etc.)
 	; without lowering SLA's global scan frequency. Skipped entirely while the
 	; mod is switched off in the MCM -- the mod event registrations above are
 	; kept (their handlers bail on the ModEnabled gate), but there is no reason
-	; to burn an OnUpdate tick every few seconds for a dormant mod.
+	; to burn an OnUpdate tick every few seconds for a dormant mod. Also skipped
+	; when the native DLL is active: it runs its own poll/event pipeline.
 	Float pollInterval = MainQuest.PollInterval
-	If pollInterval > 0.0 && MainQuest.ModEnabled
+	If pollInterval > 0.0 && MainQuest.ModEnabled && !NativeActive()
 		RegisterForSingleUpdate(pollInterval)
 	EndIf
 
@@ -178,11 +205,15 @@ Event OnPlayerLoadGame()
 EndEvent
 
 Event OnUpdate()
-	{Player-only refresh between SLA heartbeats.}
+	{Player-only refresh between SLA heartbeats. Not used in native mode.}
 	If !IsActive()
 		; Switched off in the MCM, or the requirements were lost (SLA / RaceMenu
 		; uninstalled mid-save) -- stop polling. Re-armed by RestartPolling,
 		; SetModEnabled, or the next OnPlayerLoadGame.
+		return
+	EndIf
+	If NativeActive()
+		; The DLL polls / receives events itself -- let the Papyrus loop die.
 		return
 	EndIf
 
@@ -197,8 +228,13 @@ EndEvent
 Function RestartPolling()
 	{Called from MCM when the user changes PollInterval. Cancels any pending tick
 	 and re-arms at the current interval so the change takes effect immediately
-	 (and so dialing 0 -> non-zero can restart a stopped poll loop).}
+	 (and so dialing 0 -> non-zero can restart a stopped poll loop). In native
+	 mode the push alone suffices -- the DLL re-reads its interval on push.}
 	UnregisterForUpdate()
+	PushConfigToNative()
+	If NativeActive()
+		return
+	EndIf
 	Float pollInterval = MainQuest.PollInterval
 	If pollInterval > 0.0 && IsActive()
 		RegisterForSingleUpdate(pollInterval)
@@ -232,6 +268,9 @@ Function SetModEnabled(Bool enabled)
 	 also shuts out a tween that wakes up mid-transition.}
 	tweenGen += 1
 	MainQuest.ModEnabled = enabled
+	; Native DLL first: its poll thread and event sinks gate on the pushed
+	; ModEnabled, so the switch reaches them before we re-apply or clear.
+	PushConfigToNative()
 	If enabled
 		Bool doDebug = MainQuest.DebugMode
 		UpdateActor(Game.GetPlayer(), doDebug)
@@ -431,6 +470,10 @@ Function RefreshOnArmorChange(Form akBaseObject, Bool wasRemoved)
 	 Removing armor that leaves the chest bare eases the morphs in over ~1s
 	 (TweenPlayerReveal); every other case snaps via UpdateActor -- notably equipping,
 	 so nipples flatten instantly rather than poking through a redress.}
+	If NativeActive()
+		; The DLL's TESEquipEvent sink refreshes the player on armor changes.
+		return
+	EndIf
 	If !MainQuest.SuppressUnderArmor
 		return
 	EndIf
@@ -461,6 +504,11 @@ Event OnArousalComputed(string eventName, string argString, float argNum, form s
 	If !MainQuest.ModEnabled
 		; Switched off in the MCM. The mod event registration is only (re)made on
 		; game load, not on the toggle, so the gate lives here.
+		return
+	EndIf
+	If NativeActive()
+		; The DLL sinks sla_UpdateComplete itself and sweeps player + nearby
+		; NPCs natively -- doing it here too would just double the work.
 		return
 	EndIf
 	bool doDebug = MainQuest.DebugMode
@@ -520,6 +568,19 @@ Bool Function UpdateActor(Actor who, bool doDebug=false, int modifier=0)
 		; Master switch off. Belt and braces: the event handlers already bail, but
 		; the debug spell and any third-party caller reach UpdateActor directly.
 		return false
+	EndIf
+	If NativeActive()
+		; Route every Papyrus-initiated update (debug spell, StageStart bump,
+		; MCM "Check now") through the DLL: one native call does the filters,
+		; the fresh arousal read, under-armor scaling and all SKEE writes.
+		Int applied = ABM_Native.UpdateActor(who, modifier)
+		If who == Game.GetPlayer()
+			tweenGen += 1
+			If applied >= 0
+				PlayerLastArousal = applied
+			EndIf
+		EndIf
+		return applied >= 0
 	EndIf
 	ActorBase whoBase = who.GetLeveledActorBase()
 	If !whoBase
