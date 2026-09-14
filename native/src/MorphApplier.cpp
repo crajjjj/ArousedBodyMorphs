@@ -103,7 +103,7 @@ namespace ABM::MorphApplier
 		return g_bodyMorph != nullptr;
 	}
 
-	int UpdateActor(RE::Actor* who, int modifier)
+	int UpdateActor(RE::Actor* who)
 	{
 		if (!who || !g_bodyMorph || Backend::GetKind() == Backend::Kind::kNone) {
 			return -1;
@@ -143,7 +143,7 @@ namespace ABM::MorphApplier
 		if (arousal < 0) {
 			return -1;
 		}
-		arousal = std::clamp(arousal + modifier, 0, 100);
+		arousal = std::clamp(arousal, 0, 100);
 
 		float armorScale = 1.0f;
 		if (cfg->suppressUnderArmor && IsTopCovered(who)) {

@@ -82,17 +82,17 @@ native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 |--------|------|----------|-------|
 | 0x800 | MagicEffect | `ABM_DebugSpellEffect` | Script archetype; script `ABM_DebugSpellEffect`, property `PlayerAlias` → quest 0x802 alias 0 |
 | 0x801 | Spell | `ABM_DebugSpell` | Lesser power, effect → 0x800 |
-| 0x802 | Quest | `ABM_MainQuest` | RunOnce, NOT start-game-enabled (started by the MCM's `OnConfigRegister`). Player alias 0 with script `ABM_PlayerAlias` (props: `MainQuest`, `sla_Framework`, `SexLabQuestFramework`); quest script `ABM_Quest` (prop `PlayerAlias`) |
+| 0x802 | Quest | `ABM_MainQuest` | RunOnce, NOT start-game-enabled (started by the MCM's `OnConfigRegister`). Player alias 0 with script `ABM_PlayerAlias` (props: `MainQuest`, `sla_Framework`); quest script `ABM_Quest` (prop `PlayerAlias`) |
 | 0x803 | Quest | `ABM_ConfigMenuQuest` | StartGameEnabled + RunOnce. Script `ABM_ConfigMenu` (props: `ModName`="Aroused BodyMorphs", `MainQuest`, `DebugSpell`); alias 0 carries SkyUI's `SKI_PlayerLoadGameAlias` |
 
-Masters: Skyrim.esm, Update.esm, SexLab.esm, SexLabAroused.esm.
+Masters: Skyrim.esm, Update.esm, SexLabAroused.esm. (Deliberately NOT
+SexLab.esm — the mod must load on OStim-only setups; keep it that way.)
 
 ### Hard Dependencies
 
 | Dep | Provides | Reference path on this machine |
 |-----|----------|---------------------------------|
 | SexLab Aroused (NG / OSL stub / legacy) | `slaFrameworkScr` | `C:\Playground\Skyrim\mods\SKSE\SexlabArousedNG` (canonical reference; PPJ imports its `dist\Core\Source\Scripts`) |
-| SexLab Framework | `SexLabFramework` | `C:\Playground\Skyrim\mods\build\Sexlab\scripts\Source` |
 | RaceMenu / NiOverride (SKEE) | BodyMorph API, `StringUtil` | `C:\Playground\Skyrim\mods\build\racemenu\scripts\source` |
 | PapyrusUtil | `JsonUtil`, `MiscUtil` | `C:\Playground\Skyrim\mods\build\PapyrusUtil\Source\Scripts` |
 | SkyUI | `SKI_ConfigBase` (MCM) | `C:\Playground\Skyrim\mods\build\SkyUI_5.1_SDK\Scripts\Source` |
@@ -121,8 +121,9 @@ SLA NG only broadcasts `sla_UpdateComplete` at the end of its periodic scan
 re-arms each tick via `RegisterForSingleUpdate(PollInterval)` (default 5s,
 MCM 0–60s; 0 disables). NPCs refresh only on the heartbeat
 (`OnArousalComputed`). `RestartPolling()` is called from the MCM after the
-slider changes. `SexLab StageStart` is a separate path with an immediate `+50`
-morph bump per stage.
+slider changes. (The ancestor mod's SexLab `StageStart` +50 morph bump was
+removed with the SexLab.esm master; mid-scene response comes from the poll /
+OSL events instead.)
 
 A BodySlide-compatible body/armor with morph data generated is required for
 the effect to be visible in-game (user-side concern, not a code concern).

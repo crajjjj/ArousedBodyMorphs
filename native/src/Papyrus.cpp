@@ -28,9 +28,9 @@ namespace ABM::Papyrus
 			return Backend::Describe();
 		}
 
-		int32_t UpdateActor(RE::StaticFunctionTag*, RE::Actor* who, int32_t modifier)
+		int32_t UpdateActor(RE::StaticFunctionTag*, RE::Actor* who)
 		{
-			return MorphApplier::UpdateActor(who, modifier);
+			return MorphApplier::UpdateActor(who);
 		}
 
 		void ClearActorMorphs(RE::StaticFunctionTag*, RE::Actor* who)

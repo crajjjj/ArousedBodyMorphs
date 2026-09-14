@@ -41,7 +41,3 @@ NG's prebuilt bundle instead of compiling it.
 
 - The ~1s reveal ease when body armor comes off is not reproduced natively yet
   (armor changes snap). See the TODO in `src/Events.cpp`.
-- The SexLab `StageStart` +50 bump still originates in Papyrus
-  (`SexLabFramework.HookActors` is a Papyrus API); in native mode the actors it
-  resolves are routed through `ABM_Native.UpdateActor`, so only the actor
-  resolution costs VM time.

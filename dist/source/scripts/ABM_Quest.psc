@@ -9,8 +9,8 @@ bool Property isSLAroused29 = false Auto Hidden
 
 ; Master on/off switch (MCM "Mod enabled", General page). When false the mod
 ; goes fully dormant: the player poll is unregistered, the SLA heartbeat /
-; SexLab StageStart / armor-change handlers bail immediately, and UpdateActor
-; refuses to write. Switching it off also CLEARS every morph this mod owns
+; armor-change handlers bail immediately, and UpdateActor refuses to write.
+; Switching it off also CLEARS every morph this mod owns
 ; (NIO key "ArousedBodyMorphs.esp") from the player and nearby NPCs, so the
 ; body returns to its BodySlide baseline rather than freezing at the last value.
 ; See ABM_PlayerAlias.SetModEnabled / IsActive / ClearAllMorphs.

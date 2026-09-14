@@ -25,7 +25,6 @@ Requirements
 - SKSE64, SkyUI
 - RaceMenu (SKEE / NiOverride) -- the BodyMorph API
 - PapyrusUtil
-- SexLab Framework
 - SexLab Aroused -- any flavor: SexLab Aroused NG / SLO Aroused NG (recommended),
   OSL Aroused (its SLA stub), SLAX / SSELoose / eXtended (legacy)
 - A 3BA-compatible body built in BodySlide with morphs (or import your own
@@ -47,7 +46,6 @@ Features
   covered, with a smooth ~1s reveal when the top comes off; Advanced Nudity
   Detection aware
 - Actor filters: ignore males / dead / male beasts / female beasts
-- SexLab scene hook: +50 arousal morph bump per animation stage
 - Import/Export of all settings + the morph table via JSON
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
 - Debug mode with a lesser power that dumps an actor's morph state to the
@@ -80,3 +78,5 @@ Changelog
   - Optional native SKSE layer: event-driven updates on OSL Aroused
     (OSLA_ActorArousalUpdated), native poll + heartbeat sweep on SLA NG
     (C API), SKEE-direct morph writes; Papyrus fallback for legacy forks.
+  - No SexLab requirement: masters are Skyrim, Update and SexLabAroused only,
+    so OStim-only setups load fine.

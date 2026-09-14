@@ -13,11 +13,11 @@ namespace ABM::MorphApplier
 
 	bool SkeeReady();
 
-	// Update one actor from a fresh backend arousal read (+ modifier, clamped
-	// 0-100). Returns the arousal written, or:
+	// Update one actor from a fresh backend arousal read (clamped 0-100).
+	// Returns the arousal written, or:
 	//   -1  backend/SKEE unavailable
 	//   -2  skipped (mod disabled, actor filters, no 3D)
-	int UpdateActor(RE::Actor* who, int modifier = 0);
+	int UpdateActor(RE::Actor* who);
 
 	// Drop every morph under our NIO key for the actor (mirror of the Papyrus
 	// ClearActorMorphs).

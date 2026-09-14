@@ -27,10 +27,10 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 
 ## Requirements
 
-SKSE64, SkyUI, RaceMenu (SKEE/NiOverride), PapyrusUtil, SexLab Framework, and
-any SexLab Aroused flavor (NG recommended; OSL Aroused's stub and legacy forks
-work too). A BodySlide-built body with morph data is required for the effect to
-be visible.
+SKSE64, SkyUI, RaceMenu (SKEE/NiOverride), PapyrusUtil, and any SexLab Aroused
+flavor (NG recommended; OSL Aroused's stub and legacy forks work too). SexLab
+itself is NOT required — OStim-only setups work. A BodySlide-built body with
+morph data is required for the effect to be visible.
 
 ## Repository layout
 

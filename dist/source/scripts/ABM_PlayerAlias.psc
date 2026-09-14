@@ -12,7 +12,6 @@ Int Property NIOVERRIDE_SCRIPT_VERSION = 6 AutoReadOnly
 String Property NIO_KEY = "ArousedBodyMorphs.esp" AutoReadOnly hidden
 
 slaFrameworkScr Property sla_Framework Auto
-SexLabFramework Property SexLabQuestFramework Auto
 
 ; --- Top-nudity / armor-suppression state ---
 ; Resolved fresh on every load by ResolveNudityDetection(). IsTopCovered uses the
@@ -179,8 +178,6 @@ Event OnPlayerLoadGame()
 	ResolveNudityDetection()
 
 	RegisterForModevent("sla_UpdateComplete", "OnArousalComputed")
-
-	RegisterForModEvent("StageStart", "OnStageStart")
 
 	; Hand the current settings to the optional native DLL (no-op without it).
 	PushConfigToNative()
@@ -551,17 +548,17 @@ Event OnArousalComputed(string eventName, string argString, float argNum, form s
 	EndIf
 endEvent
 
-Bool Function UpdateActor(Actor who, bool doDebug=false, int modifier=0)
-	{Set morphs of "who" according to their arousal, offset by "modifier".
+Bool Function UpdateActor(Actor who, bool doDebug=false)
+	{Set morphs of "who" according to their arousal.
 
 	 Returns true when morphs were actually written, false on every bail-out
 	 (null actor, no ActorBase, excluded by an Ignore filter, no SLA framework).
 	 Callers that just want the side effect can discard it; PokePlayerArousal
 	 uses it so the MCM check row can't report a pass on a skipped actor.}
 	If !who
-		; Callers (OnArousalComputed, OnStageStart) guard their array entries,
-		; but the debug spell's crosshair fallback and any third-party script
-		; that ends up here can still pass None. Bail rather than null-deref.
+		; OnArousalComputed guards its array entries, but the debug spell's
+		; crosshair fallback and any third-party script that ends up here can
+		; still pass None. Bail rather than null-deref.
 		return false
 	EndIf
 	If !MainQuest.ModEnabled
@@ -570,10 +567,10 @@ Bool Function UpdateActor(Actor who, bool doDebug=false, int modifier=0)
 		return false
 	EndIf
 	If NativeActive()
-		; Route every Papyrus-initiated update (debug spell, StageStart bump,
-		; MCM "Check now") through the DLL: one native call does the filters,
-		; the fresh arousal read, under-armor scaling and all SKEE writes.
-		Int applied = ABM_Native.UpdateActor(who, modifier)
+		; Route every Papyrus-initiated update (debug spell, MCM "Check now")
+		; through the DLL: one native call does the filters, the fresh arousal
+		; read, under-armor scaling and all SKEE writes.
+		Int applied = ABM_Native.UpdateActor(who)
 		If who == Game.GetPlayer()
 			tweenGen += 1
 			If applied >= 0
@@ -631,7 +628,7 @@ Bool Function UpdateActor(Actor who, bool doDebug=false, int modifier=0)
 		EndIf
 		return false
 	EndIf
-	int Arousal = framework.GetActorArousal(who) + modifier
+	int Arousal = framework.GetActorArousal(who)
 	If Arousal > 100
 		Arousal = 100
 	ElseIf Arousal < 0
@@ -754,33 +751,3 @@ Function TweenPlayerReveal()
 		PlayerArmorScale = target
 	EndIf
 EndFunction
-
-Event OnStageStart(string eventName, string argString, float argNum, form sender)
-	{SexLab animation stage hook: bump every scene actor's morphs by +50 arousal
-	 for the duration of the stage, so bodies visibly react mid-scene.}
-	If !MainQuest.ModEnabled
-		return
-	EndIf
-	Actor[] actorList = SexLabQuestFramework.HookActors(argString)
-	If !actorList
-		return
-	EndIf
-	int len = actorList.length
-	If len < 1
-		return
-	EndIf
-
-	Utility.Wait(1)
-	;giving Aroused time to do its thing.
-
-	bool doDebug = MainQuest.DebugMode
-	int i = 0
-	While i < len
-		; HookActors can hand back arrays with null slots if SexLab's hook list
-		; is mid-update; guard each entry rather than null-deref in UpdateActor.
-		If actorList[i]
-			UpdateActor(actorList[i], doDebug, 50)
-		EndIf
-		i += 1
-	EndWhile
-EndEvent

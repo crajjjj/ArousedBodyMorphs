@@ -25,10 +25,10 @@ Bool Function IsActive() Global Native
 String Function GetBackendName() Global Native
 {Human-readable backend line for the MCM requirements row.}
 
-Int Function UpdateActor(Actor akActor, Int modifier = 0) Global Native
-{Native mirror of ABM_PlayerAlias.UpdateActor: fresh arousal read (+modifier,
- clamped 0-100), filters, under-armor scale, SKEE morph writes. Returns the
- arousal written, -2 if skipped by filters/disabled, -1 if unavailable.}
+Int Function UpdateActor(Actor akActor) Global Native
+{Native mirror of ABM_PlayerAlias.UpdateActor: fresh arousal read, filters,
+ under-armor scale, SKEE morph writes. Returns the arousal written, -2 if
+ skipped by filters/disabled, -1 if unavailable.}
 
 Function ClearActorMorphs(Actor akActor) Global Native
 {Drop every morph under the ArousedBodyMorphs.esp NIO key for this actor.}
