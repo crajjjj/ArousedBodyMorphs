@@ -30,6 +30,10 @@ int[] oidMaxValue
 
 string version
 
+; "The debug power may need syncing on close." Set by the Debug mode toggle, by
+; an import that flips it, and by OnConfigOpen when the power and the toggle
+; disagree. OnConfigClose then adds or removes to match DebugMode -- idempotent,
+; so a spurious flag is harmless.
 bool toggleDebugSpell = false
 
 String Property ConfigFile = "ArousedBodyMorphs/config.json" Auto hidden
@@ -48,7 +52,8 @@ int function GetVersion()
 	; 10000 = 1.00.00 -- initial release.
 	; 10001 = 1.00.01 -- re-apply the player's morphs on MCM close.
 	; 10002 = 1.00.02 -- NPC scan radius 0 switches NPC updates off.
-	return 10002
+	; 10003 = 1.00.03 -- reconcile the debug power with the toggle on MCM open.
+	return 10003
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -84,6 +89,18 @@ event OnConfigOpen()
 	; Keep the MCM-side morph count in sync with whatever the table actually holds
 	; (Import and Reset both change it).
 	MorphsShown = MainQuest.MorphCount()
+
+	; Reconcile the debug power against the toggle. Only this menu ever calls
+	; addSpell/removeSpell, but DebugMode can be written from outside it --
+	; ResetAllState forces it false, and that chain DELIBERATELY must not call
+	; back into the MCM (doing so froze the game in the predecessor mod). So the
+	; power could be left on the player with the toggle reading Off, and the only
+	; way out was to switch Debug on and off again. Flagging the mismatch here
+	; lets OnConfigClose fix it through the existing add/remove path.
+	Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
+	If pc && MainQuest.DebugMode != pc.HasSpell(DebugSpell)
+		toggleDebugSpell = true
+	EndIf
 endEvent
 
 Function SetupPages()

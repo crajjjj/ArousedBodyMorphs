@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.2
+Aroused BodyMorphs 1.0.3
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -67,6 +67,12 @@ Inspired by the ArousedNips family of mods and their community forks.
 
 Changelog
 ---------
+1.0.3
+- Fixed the debug lesser power being left in your Powers list after "Reset all
+  state": Reset switches Debug mode off but cannot remove the power itself, so
+  it used to stay until you toggled Debug on and off again. Opening the MCM now
+  notices the mismatch and clears it on close.
+
 1.0.2
 - NPC scan radius can now be set to 0, which switches NPC updates off entirely:
   only you get arousal morphs. NPCs already morphed are cleared at the moment
