@@ -57,6 +57,34 @@ Bool nativeMode = false
 ; does NOT encode creature-ness.
 Keyword kwActorTypeNPC
 
+; Cached player actor. GetPlayerRef() is a native call, and UpdateActor made
+; one PER ACTOR in every sweep just to answer "is this the player" -- so a
+; heartbeat with 20 NPCs paid 20 of them for nothing. This script is the player
+; alias, so its own filled reference IS that actor: resolve it once and reuse.
+; The player's reference never changes within a save, so the cache cannot go
+; stale; it is re-resolved per load anyway (OnPlayerLoadGame -> ResolvePlayerRef).
+Actor PlayerRef
+
+Actor Function GetPlayerRef()
+	{The player, resolved once. Prefers the alias's own reference (no global
+	 lookup); falls back to GetPlayerRef() if the alias somehow isn't filled
+	 yet, so no caller can get None.}
+	If PlayerRef
+		Return PlayerRef
+	EndIf
+	PlayerRef = GetActorReference()
+	If !PlayerRef
+		PlayerRef = Game.GetPlayer()
+	EndIf
+	Return PlayerRef
+EndFunction
+
+Function RefreshPlayer()
+	{Re-apply the player's morphs now. MCM entry point (OnConfigClose), so the
+	 menu doesn't need a player reference of its own.}
+	UpdateActor(GetPlayerRef(), false)
+EndFunction
+
 Event OnInit()
 	{Fires once when the alias is first filled. Warm the sla_Framework cache
 	 eagerly so the manual OnPlayerLoadGame call from Quest.OnInit (and every
@@ -144,6 +172,10 @@ Event OnPlayerLoadGame()
 	; abort paths below so the armor-change handlers see the right mode even
 	; when requirements fail.
 	ResolveNativeMode()
+
+	; Re-resolve the cached player reference for this save.
+	PlayerRef = None
+	GetPlayerRef()
 
 	if MainQuest.DebugMode
 		debug.Notification("Aroused BodyMorphs: checking for requirements")
@@ -249,7 +281,7 @@ Event OnUpdate()
 		return
 	EndIf
 
-	UpdateActor(Game.GetPlayer(), false)
+	UpdateActor(GetPlayerRef(), false)
 
 	Float pollInterval = MainQuest.PollInterval
 	If pollInterval > 0.0
@@ -305,7 +337,7 @@ Function SetModEnabled(Bool enabled)
 	PushConfigToNative()
 	If enabled
 		Bool doDebug = MainQuest.DebugMode
-		UpdateActor(Game.GetPlayer(), doDebug)
+		UpdateActor(GetPlayerRef(), doDebug)
 		UpdateNearbyActors(doDebug)
 		RestartPolling()
 	Else
@@ -332,7 +364,7 @@ Actor[] Function ScanNearbyAroused(Bool ignoreDead)
 		EndIf
 		Return None
 	EndIf
-	Return MiscUtil.ScanCellNPCsByFaction(framework.slaArousal, Game.GetPlayer(), MainQuest.ScanCellRadius, 0, 127, ignoreDead)
+	Return MiscUtil.ScanCellNPCsByFaction(framework.slaArousal, GetPlayerRef(), MainQuest.ScanCellRadius, 0, 127, ignoreDead)
 EndFunction
 
 Function UpdateNearbyActors(Bool doDebug)
@@ -392,7 +424,7 @@ Function ClearAllMorphs()
 	If !MainQuest.isNioOk
 		return
 	EndIf
-	ClearActorMorphs(Game.GetPlayer())
+	ClearActorMorphs(GetPlayerRef())
 
 	Actor[] theActors = ScanNearbyAroused(false)
 	If !theActors
@@ -426,7 +458,7 @@ Int Function PokePlayerArousal()
 	If !GetFramework()
 		Return -1
 	EndIf
-	If !UpdateActor(Game.GetPlayer(), MainQuest.DebugMode)
+	If !UpdateActor(GetPlayerRef(), MainQuest.DebugMode)
 		Return -2
 	EndIf
 	Return PlayerLastArousal
@@ -543,10 +575,10 @@ Function RefreshOnArmorChange(Form akBaseObject, Bool wasRemoved)
 		EndIf
 	EndIf
 
-	If wasRemoved && !IsTopCovered(Game.GetPlayer())
+	If wasRemoved && !IsTopCovered(GetPlayerRef())
 		TweenPlayerReveal()
 	Else
-		UpdateActor(Game.GetPlayer(), MainQuest.DebugMode)
+		UpdateActor(GetPlayerRef(), MainQuest.DebugMode)
 	EndIf
 EndFunction
 
@@ -568,7 +600,7 @@ Event OnArousalComputed(string eventName, string argString, float argNum, form s
 		debug.Trace("ABM: Arousal event")
 	EndIf
 
-	UpdateActor(Game.GetPlayer(), doDebug)
+	UpdateActor(GetPlayerRef(), doDebug)
 
 	If argNum <= 0
 		If doDebug
@@ -626,7 +658,7 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 		; through the DLL: one native call does the filters, the fresh arousal
 		; read, under-armor scaling and all SKEE writes.
 		Int applied = ABM_Native.UpdateActor(who)
-		If who == Game.GetPlayer()
+		If who == GetPlayerRef()
 			tweenGen += 1
 			If applied >= 0
 				PlayerLastArousal = applied
@@ -712,7 +744,7 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 		EndIf
 	EndIf
 
-	Bool isPlayer = who == Game.GetPlayer()
+	Bool isPlayer = who == GetPlayerRef()
 	SetActorMorphs(who, Arousal, armorScale, doDebug)
 
 	; Track the player's last-applied scale (the reveal tween's start point) and
@@ -804,7 +836,7 @@ Function TweenPlayerReveal()
 		; bump can't stop it) and re-apply morphs a second after they were cleared.
 		return
 	EndIf
-	Actor player = Game.GetPlayer()
+	Actor player = GetPlayerRef()
 	If !player
 		return
 	EndIf

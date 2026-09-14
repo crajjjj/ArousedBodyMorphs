@@ -52,7 +52,8 @@ int function GetVersion()
 	; 10000 = 1.00.00 -- initial release of Aroused BodyMorphs (ABM_* scripts,
 	; area-grouped MCM sliders, ArousedBodyMorphs/ JSON paths, NIO key
 	; "ArousedBodyMorphs.esp").
-	return 10000
+	; 10001 = 1.00.01 -- re-apply the player's morphs on MCM close.
+	return 10001
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -133,11 +134,29 @@ Event OnConfigClose()
 	; Mirror whatever changed this session into the optional native DLL (single
 	; push here instead of one per option handler). No-op without the DLL.
 	MainQuest.PlayerAlias.PushConfigToNative()
+
+	; Re-apply the player's morphs now. Every value edit in this menu (intensity
+	; preset, a MaxValue slider, the under-armor scale) only writes to the quest's
+	; tables -- nothing applies them -- so without this the body keeps the old
+	; look until the next update tick: up to 5s on the default poll, up to 120s
+	; with polling set to 0, and in native + OSL Aroused mode until OSL happens to
+	; fire an arousal event, since that backend runs no poll at all. Long enough
+	; to read as "the preset did nothing".
+	;
+	; Cost is one refresh per menu close, which is exactly the moment the user is
+	; waiting to see the result. When nothing actually changed, SetActorMorphs'
+	; probe finds the values already applied and skips the writes + mesh rebuild.
+	; NPCs are deliberately not swept here: that is a full cell scan for a change
+	; the user is judging on their own body, and they catch up on the next
+	; heartbeat anyway.
+	MainQuest.PlayerAlias.RefreshPlayer()
+
 	if toggleDebugSpell
+		Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
 		if MainQuest.DebugMode
-			Game.GetPlayer().addSpell(DebugSpell)
+			pc.addSpell(DebugSpell)
 		else
-			Game.GetPlayer().removeSpell(DebugSpell)
+			pc.removeSpell(DebugSpell)
 		endIf
 		toggleDebugSpell = false
 	endIf

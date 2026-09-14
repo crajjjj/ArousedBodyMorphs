@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.0
+Aroused BodyMorphs 1.0.1
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -66,6 +66,13 @@ Inspired by the ArousedNips family of mods and their community forks.
 
 Changelog
 ---------
+1.0.1
+- Closing the MCM now re-applies your morphs immediately. Picking an intensity
+  preset or moving a slider only changed the stored values; the body caught up
+  on the next update tick, which could be up to 120s with polling disabled --
+  or not until arousal next changed when running the native DLL with OSL
+  Aroused, which uses no poll. Nearby NPCs still follow on the next heartbeat.
+
 1.0.0
 - Initial release:
   - ESL-flagged plugin ArousedBodyMorphs.esp, ABM_* script set,
