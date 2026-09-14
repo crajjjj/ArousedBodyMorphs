@@ -70,9 +70,12 @@ Event-driven replacement for the Papyrus update pipeline; see
 
 Three places hold the version — keep in sync:
 
-1. **`dist\meta.ini`** — `version=1.0.0`. MO2 reads this; canonical user-facing version.
+1. **`dist\meta.ini`** — `version=`. MO2 reads this; canonical user-facing version.
 2. **`ABM_ConfigMenu.psc`** — `GetVersion()` returns `(M)MmmPP` (10000 = 1.00.00). Recompile to `.pex` after editing.
-3. **`dist\ReadMe_ArousedBodyMorphs.txt`** — top-of-file version line and changelog entry.
+3. **`dist\ReadMe_ArousedBodyMorphs.txt`** — top-of-file version line.
+
+The readme carries NO changelog: this is a pre-release mod, so per-version
+history is noise. Release notes live on the GitHub release instead.
 
 Release marker: git tags (see global instructions — don't double-bump an
 untagged version).

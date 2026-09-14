@@ -47,12 +47,8 @@ import MiscUtil
 
 
 int function GetVersion()
-	;format = (M)MmmPP
-	;12345 => 1.23.45
-	; 10000 = 1.00.00 -- initial release.
-	; 10001 = 1.00.01 -- re-apply the player's morphs on MCM close.
-	; 10002 = 1.00.02 -- NPC scan radius 0 switches NPC updates off.
-	; 10003 = 1.00.03 -- Reset removes the debug power along with the toggle.
+	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
+	; OnVersionUpdate when a save carries an older number.
 	return 10003
 endFunction
 
