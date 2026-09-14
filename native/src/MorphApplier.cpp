@@ -13,10 +13,9 @@ namespace ABM::MorphApplier
 
 		SKEE::IBodyMorphInterface* g_bodyMorph = nullptr;
 
-		// Resolved once at kDataLoaded (ResolveForms). Forms are stable for
-		// the lifetime of the process once data is loaded, and eager
-		// resolution keeps the update paths free of lazy-init races (they run
-		// on the main thread AND, for the evaluation half, the Papyrus VM).
+		// Resolved once at kDataLoaded. Forms are process-stable after that,
+		// and eager resolution keeps the update paths free of lazy-init races
+		// (they run on the main thread AND the Papyrus VM).
 		RE::BGSKeyword* g_kwArmorCuirass = nullptr;
 		RE::BGSKeyword* g_kwClothingBody = nullptr;
 		RE::BGSKeyword* g_kwActorTypeNPC = nullptr;
@@ -39,11 +38,9 @@ namespace ABM::MorphApplier
 			return match;
 		}
 
-		// Mirror of ABM_PlayerAlias.IsTopCovered: vanilla body-slot keyword
-		// check first, Advanced Nudity Detection only OVERRIDES covered->bare
-		// (so unscanned NPCs still read correctly). Papyrus used WornHasKeyword
-		// (any worn item); the cuirass/clothing keywords live on body-slot
-		// armor, so checking slot 32 is the practical equivalent.
+		// Mirror of ABM_PlayerAlias.IsTopCovered: keyword check first, AND
+		// only OVERRIDES covered->bare. Papyrus uses WornHasKeyword (any item);
+		// these keywords live on body-slot armor, so slot 32 is equivalent.
 		bool IsTopCovered(RE::Actor* who)
 		{
 			auto wornBody = who->GetWornArmor(RE::BGSBipedObjectForm::BipedObjectSlot::kBody);
@@ -62,10 +59,8 @@ namespace ABM::MorphApplier
 			return true;
 		}
 
-		// Filters + fresh arousal read + under-armor scale. No SKEE calls, so
-		// safe from any thread (form/AV reads, same class as Papyrus natives).
-		// Returns the arousal in effect (outScale set), or -1/-2 per the
-		// header contract.
+		// Filters + arousal read + under-armor scale. No SKEE calls, so safe
+		// from any thread. Returns arousal (outScale set) or -1/-2.
 		int Evaluate(RE::Actor* who, float& outScale)
 		{
 			if (!who || !g_bodyMorph || Backend::GetKind() == Backend::Kind::kNone) {
@@ -79,9 +74,8 @@ namespace ABM::MorphApplier
 				return -2;
 			}
 
-			// Actor filters -- same split as the Papyrus UpdateActor: sex from
-			// the ActorBase (SEX::kNone/-1 counts as male, as in Papyrus),
-			// creature-ness from the race's ActorTypeNPC keyword.
+			// Same split as the Papyrus UpdateActor: sex from the ActorBase
+			// (kNone counts as male), creature-ness from the race keyword.
 			auto base = who->GetActorBase();
 			if (!base) {
 				return -2;
@@ -116,9 +110,8 @@ namespace ABM::MorphApplier
 		}
 
 		// The SKEE write half. MAIN THREAD ONLY: ApplyBodyMorphs does direct
-		// geometry work on the ref's loaded 3D. Re-checks the cheap gates --
-		// when queued from the VM the world may have moved on by the time the
-		// task runs (mod switched off, 3D unloaded).
+		// geometry work. Re-checks the cheap gates, since when queued from the
+		// VM the world may have moved on by the time the task runs.
 		void ApplyMorphs(RE::Actor* who, int arousal, float armorScale)
 		{
 			if (!who || !g_bodyMorph) {
@@ -131,13 +124,11 @@ namespace ABM::MorphApplier
 
 			const float factor = static_cast<float>(arousal) / 100.0f * armorScale;
 
-			// Unchanged-value skip. Every slot is maxValue * the same factor,
-			// so one slot settles whether anything would change -- and asking
-			// SKEE what WE last wrote (our key only) makes SKEE the single
-			// source of truth: no parallel cache to invalidate on a settings
-			// push, a save load, or an external clear, and the comparison
-			// target moves with the settings on its own. Skipping here avoids
-			// the ApplyBodyMorphs mesh rebuild, which is the real cost.
+			// Unchanged-value skip: every slot shares one factor, so a single
+			// slot settles whether anything would change. Reading back what WE
+			// wrote (our key) makes SKEE the source of truth -- no parallel
+			// cache to invalidate on a push, a load, or an external clear.
+			// Skipping avoids the ApplyBodyMorphs rebuild, the real cost.
 			// Probe slot = first non-zero max; a zero-max slot reads 0 for
 			// every factor and could never detect a change.
 			const MorphEntry* probe = nullptr;

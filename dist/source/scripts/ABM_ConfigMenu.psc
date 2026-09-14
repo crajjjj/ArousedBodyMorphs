@@ -7,10 +7,8 @@ Spell Property DebugSpell Auto
 float property range = 3.0 AutoReadOnly hidden
 
 int hasReqFlag
-; Requirements-only variant of hasReqFlag: set when NiOverride / SLA are missing,
-; but NOT when the mod is merely switched off. Used by the options that are
-; diagnostics rather than tuning, so they keep working in the state they exist to
-; report on.
+; Like hasReqFlag but NOT set when the mod is merely switched off -- for the
+; diagnostic options, which must keep working in the state they report on.
 int reqOnlyFlag
 
 int oidModEnabled
@@ -24,10 +22,8 @@ int oidIgnoreFemaleBeast
 int oidSuppressUnderArmor
 int oidUnderArmorScale
 
-; Combobox options for the intensity preset. Hardcoded in fixed order so the
-; dropdown shows "Minimal" -> "Exaggerated" rather than alphabetical.
-; Backed by JSON files at SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\
-; IntensityPresets\<name>.json. Allocated lazily in GetIntensityPresetNames().
+; Preset combobox entries, in fixed (subtle -> strong) order rather than
+; alphabetical. Backed by the JSON files in IntensityPresets\.
 String[] _intensityPresetNames
 
 int[] oidMaxValue
@@ -49,24 +45,16 @@ import MiscUtil
 int function GetVersion()
 	;format = (M)MmmPP
 	;12345 => 1.23.45
-	; 10000 = 1.00.00 -- initial release of Aroused BodyMorphs (ABM_* scripts,
-	; area-grouped MCM sliders, ArousedBodyMorphs/ JSON paths, NIO key
-	; "ArousedBodyMorphs.esp").
+	; 10000 = 1.00.00 -- initial release.
 	; 10001 = 1.00.01 -- re-apply the player's morphs on MCM close.
 	return 10001
 endFunction
 
 Event OnVersionUpdate(Int ver)
-	{Called by SKI_ConfigBase when the saved version is below GetVersion(). Update
-	 the cached display string only.
-
-	 We deliberately do NOT call anything cross-script here (no stop()/start(), no
-	 RestartPolling on the alias). OnVersionUpdate fires DURING SkyUI's MCM
-	 registration on first-install / first-load-after-bump, when the MCM script
-	 lock is contended. Reaching across to the Quest / Alias from here was
-	 reproduced freezing the game in this mod's predecessor. The poll is
-	 (re-)registered by Alias.OnPlayerLoadGame on every save load anyway, so no
-	 force-restart is needed.}
+	{Fired by SKI_ConfigBase when the saved version is older. Updates the display
+	 string ONLY: this runs during SkyUI's MCM registration with the script lock
+	 contended, and reaching across to the Quest / Alias here froze the game in
+	 the predecessor mod. The poll is re-registered on every load anyway.}
 	int Major = ver/10000
 	int Minor = (ver%10000)/100
 	int Patch = ver%100
@@ -104,22 +92,17 @@ Function SetupPages()
 EndFunction
 
 Function RefreshReqFlag()
-	{Recompute the disabled-flag applied to every tuning option: set when the mod is
-	 switched off with the "Mod enabled" master toggle, or when its requirements
-	 aren't met. Either way nothing the flagged options control has any effect, so
-	 greying them out is honest rather than merely tidy.
+	{Recompute the disabled-flag for the tuning options: set when the mod is off
+	 or its requirements aren't met, since nothing they control would have effect.
 
-	 Must run on EVERY page draw, not once per menu open: both the master toggle and
-	 Recovery > Reset change this mid-menu and then redraw (Reset re-runs the
-	 requirements check via ResetAllState -> Alias.OnPlayerLoadGame). A flag cached at
-	 open time would leave the gated options greyed out against freshly-drawn "OK"
-	 status rows until the MCM was closed and reopened -- failing exactly the recovery
+	 Must run on EVERY page draw, not once per open: the master toggle and Reset
+	 both change it mid-menu and redraw. A flag cached at open time would leave
+	 options greyed against freshly-drawn "OK" rows -- failing the very recovery
 	 path Reset exists for.
 
-	 Deliberately NOT applied to "Mod enabled" itself, nor to Import / Export /
-	 Reset: those have to stay usable to get back out of the disabled state. The
-	 "Player arousal" check row and Debug mode take reqOnlyFlag instead -- they are
-	 diagnostics, and a switched-off mod is a thing you may well want to diagnose.}
+	 NOT applied to "Mod enabled", Import / Export / Reset (they must stay usable
+	 to get back out of the disabled state) nor to the diagnostics, which take
+	 reqOnlyFlag -- a switched-off mod is a thing you may want to diagnose.}
 	reqOnlyFlag = 0
 	If !(MainQuest.isNioOk && (MainQuest.isSLAroused28 || MainQuest.isSLAroused29))
 		reqOnlyFlag = OPTION_FLAG_DISABLED
@@ -179,11 +162,9 @@ event OnPageReset(string page)
 endEvent
 
 Function ClearOptionIDs()
-	{Option IDs are only valid for the page that drew them, and SkyUI ids are
-	 buffer indices starting at 0 -- so a stale oid kept from the OTHER page can
-	 numerically collide with a fresh oid on this one and misroute the handler
-	 (e.g. a morph slider opening with the poll-interval dialog range). Wipe
-	 everything to -1 before each page draw.}
+	{Wipe every oid before a page draw. SkyUI ids are buffer indices from 0, so a
+	 stale oid from the OTHER page can collide with a fresh one here and misroute
+	 the handler -- e.g. a morph slider opening the poll-interval dialog.}
 	oidModEnabled         = -1
 	oidDebugMode          = -1
 	oidIgnoreMales        = -1
@@ -237,12 +218,8 @@ Function DrawGeneralPage()
 	AddTextOptionST("State_CheckPlayer", "Player arousal", "Check now", reqOnlyFlag)
 
 	AddHeaderOption("Intensity preset")
-	; Display the last-selected preset name ("Natural" on fresh install / after
-	; Reset, since the built-in defaults ARE the Natural tier). Selecting one
-	; overwrites every MaxValue slider with the preset's values for whichever
-	; morphs are currently loaded -- sliders for morphs not in the preset (e.g.
-	; user-imported morphs the bundled presets don't cover) keep their current
-	; values.
+	; Selecting a preset overwrites every MaxValue slider it has a key for;
+	; morphs the preset doesn't cover (custom imports) keep their values.
 	String presetLabel = MainQuest.IntensityPreset
 	If presetLabel == ""
 		presetLabel = "Choose..."
@@ -300,10 +277,9 @@ Function DrawMorphsPage()
 	AddTextOption("Note: NippleSize is an inverted slider;", "", OPTION_FLAG_DISABLED)
 	AddTextOption("smaller number means bigger result.", "", OPTION_FLAG_DISABLED)
 
-	; Build the display order: sliders grouped by area (Nipples / Areolas /
-	; Vagina / Other), preserving table order within each group. order[d] maps
-	; display position d -> morph-table index, so the option handlers keep
-	; indexing oidMaxValue by table index and need no changes.
+	; Display order: grouped by area, table order preserved within a group.
+	; order[d] maps display position -> table index, so the handlers keep
+	; indexing oidMaxValue by table index.
 	int[] order = new int[128]
 	int total = 0
 	int headers = 0
@@ -325,10 +301,8 @@ Function DrawMorphsPage()
 		g += 1
 	endwhile
 
-	; Split the rows across both columns: SkyUI renders ~26 rows per column with
-	; no scrolling, so the full set (23 sliders + 4 group headers + the 3-row
-	; preamble above) must break to the right column at the midpoint. The break
-	; can land mid-group; the group header is not repeated.
+	; SkyUI renders ~26 rows per column without scrolling, so the full set must
+	; break at the midpoint. The break can land mid-group; headers don't repeat.
 	int split = (total + headers + 3 + 1) / 2
 	int rows = 3
 	int column = 0
@@ -451,10 +425,8 @@ endstate
 
 event OnOptionSelect(int option)
 	if option == oidModEnabled
-		; SetModEnabled owns the whole transition (clear morphs / re-apply, stop or
-		; re-arm the poll) and writes the property itself, so read it back rather
-		; than assuming. ForcePageReset redraws so every other option greys out
-		; (or comes back) to match.
+		; SetModEnabled owns the whole transition and writes the property itself,
+		; so read it back. The redraw greys the other options to match.
 		MainQuest.PlayerAlias.SetModEnabled(!MainQuest.ModEnabled)
 		SetToggleOptionValue(option, MainQuest.ModEnabled)
 		ForcePageReset()
@@ -708,12 +680,10 @@ Bool Function ImportUserSettings()
 	endif
 	UnLoad(MorphFile, false, false)
 
-	; Deliberately last, after the morph table above has landed: an imported flip of
-	; the master switch has to run the full transition (clear morphs / re-apply +
-	; poll), and re-applying before the sliders were read would paint the body with
-	; the pre-import values -- and leave them there if the imported poll interval is
-	; 0. SetModEnabled re-writes the property to the value it already holds, which is
-	; harmless.
+	; Deliberately last, after the morph table has landed: an imported flip of the
+	; master switch runs the full transition, and re-applying before the sliders
+	; were read would paint the pre-import values -- and leave them there if the
+	; imported poll interval is 0.
 	If MainQuest.ModEnabled != oldModEnabled
 		MainQuest.PlayerAlias.SetModEnabled(MainQuest.ModEnabled)
 	Else
@@ -724,11 +694,9 @@ Bool Function ImportUserSettings()
 EndFunction
 
 String[] Function GetIntensityPresetNames()
-	{Lazy-allocate the hardcoded preset list. Order is intentional (subtle ->
-	 strong) and matches the four JSON files shipped under SKSE\Plugins\
-	 StorageUtilData\ArousedBodyMorphs\IntensityPresets\. Power users can drop
-	 new JSON files in that folder but won't see them in the combobox -- the
-	 list is fixed.}
+	{Lazy-allocate the preset list, ordered subtle -> strong to match the four
+	 shipped JSON files. Extra JSON files in that folder won't appear -- the list
+	 is fixed.}
 	If !_intensityPresetNames
 		_intensityPresetNames = new String[4]
 		_intensityPresetNames[0] = "Minimal"
@@ -740,12 +708,9 @@ String[] Function GetIntensityPresetNames()
 EndFunction
 
 Function ApplyIntensityPreset(String presetName)
-	{Load <presetName>.json from IntensityPresets/ and overwrite MaxValue[i] for
-	 every morph in MorphNames[] that has a matching key in the preset. Morphs
-	 absent from the preset keep their current MaxValue, so user-imported morphs
-	 the preset doesn't cover aren't zeroed out. The bundled preset files key
-	 their entries with exactly the FullMorphSet names, so no case normalisation
-	 is needed.}
+	{Overwrite MaxValue[i] for every morph the preset has a key for. Morphs it
+	 doesn't cover keep their value, so custom imports aren't zeroed. Preset keys
+	 are exactly the FullMorphSet names -- no normalisation needed.}
 	String path = "ArousedBodyMorphs/IntensityPresets/" + presetName
 	Load(path)
 	int i = 0

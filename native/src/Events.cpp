@@ -8,19 +8,17 @@ namespace ABM::Events
 {
 	namespace
 	{
-		// Coalesce heartbeat sweeps: if one is already queued, drop the event
-		// (same pattern OSL Aroused uses for its AND refresh bursts).
+		// Coalesce heartbeat sweeps: drop the event if one is already queued.
 		std::atomic<bool> g_sweepPending{ false };
 
-		// Coalesce player equip refreshes the same way: a redress fires one
-		// TESEquipEvent per item in the same frame(s); one queued task
-		// re-reads the final worn state, so the rest add nothing.
+		// Same for equip refreshes: a redress fires one event per item, and
+		// one queued task re-reads the final worn state anyway.
 		std::atomic<bool> g_equipRefreshPending{ false };
 
-		// condition_variable_any so the jthread's stop_token can interrupt
-		// the wait -- a plain condition_variable never sees the stop request,
-		// which would leave the destructor's join blocked for the remainder
-		// of the interval (user-settable up to 60s) at shutdown.
+		// condition_variable_ANY so the jthread's stop_token can interrupt the
+		// wait. A plain condition_variable never sees the stop request, leaving
+		// the destructor's join blocked for the rest of the interval (up to
+		// 60s) at shutdown.
 		std::condition_variable_any g_pollCv;
 		std::mutex                  g_pollMutex;
 		bool                        g_configDirty = false;  // guarded by g_pollMutex
@@ -35,10 +33,9 @@ namespace ABM::Events
 		}
 
 		// Player + every high-processed NPC within scanRadius. Actor filters
-		// (sex/dead/creature) live in MorphApplier::UpdateActor, so this only
-		// bounds the sweep spatially; UpdateActor's unchanged-value probe then
-		// skips the write for actors already at their target values -- in
-		// particular every never-aroused bystander. Main thread only.
+		// live in UpdateActor, so this only bounds the sweep spatially; its
+		// unchanged-value probe then skips every bystander already at target.
+		// Main thread only.
 		void SweepNearby()
 		{
 			auto player = RE::PlayerCharacter::GetSingleton();
@@ -87,9 +84,8 @@ namespace ABM::Events
 
 				if (kind == Backend::Kind::kOsl &&
 					std::strcmp(name, "OSLA_ActorArousalUpdated") == 0) {
-					// sender is the actor; the payload float is OSL's exposure,
-					// so re-read the composite arousal through GetArousalExt in
-					// the task instead of trusting numArg semantics.
+					// sender is the actor, but the payload float is OSL's
+					// exposure -- re-read composite arousal in the task.
 					auto actor = event->sender ? event->sender->As<RE::Actor>() : nullptr;
 					if (actor) {
 						RE::ActorHandle handle = actor->GetHandle();
@@ -143,10 +139,9 @@ namespace ABM::Events
 				if (!form || !form->As<RE::TESObjectARMO>()) {
 					return RE::BSEventNotifyControl::kContinue;
 				}
-				// Snap to the new covered/bare state; the queued task reads
-				// the final worn state, so an outfit-swap burst collapses to
-				// one refresh. TODO: reproduce the Papyrus ~1s reveal ease
-				// for the unequip direction.
+				// Snap to the new covered/bare state; an outfit-swap burst
+				// collapses to one refresh. TODO: reproduce the Papyrus ~1s
+				// reveal ease for the unequip direction.
 				if (!g_equipRefreshPending.exchange(true)) {
 					SKSE::GetTaskInterface()->AddTask([]() {
 						g_equipRefreshPending.store(false);
@@ -166,10 +161,9 @@ namespace ABM::Events
 				auto cfg = Settings::Snapshot();
 				const bool active = Backend::GetKind() == Backend::Kind::kSlaNg &&
 				                    cfg->pushed && cfg->modEnabled && cfg->pollInterval > 0.0f;
-				// Idle wakeup cadence while inactive; the pushed interval while
-				// active. Wakes early on a config push (g_configDirty, set +
-				// notified under the mutex so the wakeup can't be lost) or on
-				// the jthread's stop request at shutdown.
+				// Idle cadence while inactive, the pushed interval while
+				// active. Wakes early on a config push (flagged under the
+				// mutex so it can't be lost) or on the stop request.
 				const auto wait = active ?
 					std::chrono::milliseconds(static_cast<long long>(cfg->pollInterval * 1000.0f)) :
 					std::chrono::milliseconds(2000);

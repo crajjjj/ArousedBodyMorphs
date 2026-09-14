@@ -5,9 +5,8 @@
 #include "MorphApplier.h"
 #include "Settings.h"
 
-// Bindings for dist/source/scripts/ABM_Native.psc. The Papyrus side (quest /
-// alias / MCM) stays the owner of all persisted settings; it mirrors them here
-// via PushConfig/PushMorphTable on load and whenever the MCM changes them.
+// Bindings for ABM_Native.psc. Papyrus owns all persisted settings and mirrors
+// them here via PushConfig/PushMorphTable on load and on any MCM change.
 
 namespace ABM::Papyrus
 {
@@ -30,10 +29,9 @@ namespace ABM::Papyrus
 
 		int32_t UpdateActor(RE::StaticFunctionTag*, RE::Actor* who)
 		{
-			// Papyrus natives run on the VM thread: evaluate inline (so the
-			// caller gets the arousal / skip code), defer the SKEE geometry
-			// work to the main thread -- ApplyBodyMorphs off-thread races the
-			// renderer.
+			// Papyrus natives run on the VM thread: evaluate inline for the
+			// return code, defer the SKEE write -- off-thread geometry work
+			// races the renderer.
 			return MorphApplier::UpdateActorDeferred(who);
 		}
 
@@ -70,8 +68,7 @@ namespace ABM::Papyrus
 			const size_t count = std::min(names.size(), maxValues.size());
 			morphs.reserve(count);
 			for (size_t i = 0; i < count; ++i) {
-				// The Papyrus arrays are 128-slot with trailing empties -- stop
-				// at the first empty name, like every Papyrus-side iterator.
+				// 128-slot arrays with trailing empties; stop at the first.
 				if (names[i].empty()) {
 					break;
 				}

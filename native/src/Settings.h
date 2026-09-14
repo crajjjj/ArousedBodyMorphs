@@ -1,10 +1,9 @@
 #pragma once
 
-// Mod configuration, pushed from the Papyrus side (ABM_PlayerAlias.
-// PushConfigToNative -> ABM_Native.PushConfig / PushMorphTable). The MCM stays
-// the single source of truth; this is a read-mostly mirror the native update
-// paths consume. Readers take an immutable snapshot (shared_ptr swap) so event
-// sinks and the poll thread never hold a lock across engine calls.
+// Config mirrored from Papyrus (PushConfigToNative). The MCM stays the source
+// of truth; this is a read-mostly copy. Readers take an immutable snapshot
+// (shared_ptr swap) so sinks and the poll thread never hold a lock across
+// engine calls.
 
 namespace ABM
 {

@@ -35,8 +35,7 @@ namespace
 	{
 		switch (message->type) {
 		case MessagingInterface::kDataLoaded:
-			// Every SKSE DLL (arousal backends, skee) is loaded and data is in;
-			// resolve everything, then start listening.
+			// Every SKSE DLL and all data is loaded -- resolve, then listen.
 			ABM::Backend::Probe();
 			ABM::MorphApplier::ResolveSkee();
 			ABM::MorphApplier::ResolveForms();

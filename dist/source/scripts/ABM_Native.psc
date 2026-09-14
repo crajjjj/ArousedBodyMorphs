@@ -1,20 +1,17 @@
 ScriptName ABM_Native Hidden
-{Bindings for the OPTIONAL ArousedBodyMorphs.dll native layer.
+{Bindings for the OPTIONAL ArousedBodyMorphs.dll.
 
- When the DLL is installed and a native arousal backend is detected (SexLab
- Aroused NG's C API, or OSL Aroused's exports + OSLA_ActorArousalUpdated
- events), the DLL takes over the whole update pipeline: event-driven per-actor
- refreshes, the player poll, armor-change refreshes, and the SKEE morph writes
- -- all off the Papyrus VM. The Papyrus side keeps the MCM and persisted
- settings, mirroring them here via PushConfig/PushMorphTable.
+ With the DLL installed and a backend detected, it takes over the whole update
+ pipeline -- per-actor refreshes, the player poll, armor changes and the SKEE
+ writes -- off the Papyrus VM. Papyrus keeps the MCM and settings, mirroring
+ them here via PushConfig/PushMorphTable.
 
- Without the DLL (or on a legacy Papyrus-only SLA fork) every native function
- here is unbound -- ALWAYS gate calls with IsInstalled(), which needs only
- SKSE. ABM_PlayerAlias.NativeActive() is the canonical combined gate.}
+ Without the DLL every native here is unbound: ALWAYS gate on IsInstalled(),
+ which needs only SKSE. ABM_PlayerAlias.NativeActive() is the combined gate.}
 
 Bool Function IsInstalled() Global
-	{True when ArousedBodyMorphs.dll is loaded (registered with SKSE). Safe to
-	 call unconditionally; the natives below are only callable when this is true.}
+	{True when the DLL is registered with SKSE. Safe to call unconditionally;
+	 the natives below are only callable when it is true.}
 	Return SKSE.GetPluginVersion("ArousedBodyMorphs") > 0
 EndFunction
 
@@ -26,16 +23,14 @@ String Function GetBackendName() Global Native
 {Human-readable backend line for the MCM requirements row.}
 
 Int Function UpdateActor(Actor akActor) Global Native
-{Native mirror of ABM_PlayerAlias.UpdateActor: fresh arousal read, filters,
- under-armor scale, SKEE morph writes. Returns the arousal in effect, -2 if
- skipped by filters/disabled, -1 if unavailable. The filters + arousal read
- run inline (so the return code is real); the SKEE geometry write is queued
- to the game's main thread and lands within a frame -- doing it on the
- Papyrus VM thread would race the renderer.}
+{Native mirror of ABM_PlayerAlias.UpdateActor. Returns the arousal in effect,
+ -2 skipped by filters/disabled, -1 unavailable. Filters and the arousal read
+ run inline so the return code is real; the SKEE write is queued to the main
+ thread and lands within a frame -- doing it on the VM thread would race the
+ renderer.}
 
 Function ClearActorMorphs(Actor akActor) Global Native
-{Drop every morph under the ArousedBodyMorphs.esp NIO key for this actor
- (write queued to the main thread, same as UpdateActor).}
+{Drop every morph under our NIO key; queued to the main thread.}
 
 Function PushConfig(Bool modEnabled, Bool ignoreMales, Bool ignoreDead, Bool ignoreMaleBeast, Bool ignoreFemaleBeast, Bool suppressUnderArmor, Float underArmorScale, Float pollInterval, Float scanRadius, Bool debugMode) Global Native
 {Mirror the MCM option block into the DLL. Call after any change.}

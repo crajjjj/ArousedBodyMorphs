@@ -7,42 +7,30 @@ bool Property isNioOk = false Auto Hidden
 bool Property isSLAroused28 = false Auto Hidden
 bool Property isSLAroused29 = false Auto Hidden
 
-; Master on/off switch (MCM "Mod enabled", General page). When false the mod
-; goes fully dormant: the player poll is unregistered, the SLA heartbeat /
-; armor-change handlers bail immediately, and UpdateActor refuses to write.
-; Switching it off also CLEARS every morph this mod owns
-; (NIO key "ArousedBodyMorphs.esp") from the player and nearby NPCs, so the
-; body returns to its BodySlide baseline rather than freezing at the last value.
-; See ABM_PlayerAlias.SetModEnabled / IsActive / ClearAllMorphs.
+; Master on/off switch. False = fully dormant: poll unregistered, handlers
+; bail, UpdateActor refuses to write. Switching off also clears every morph we
+; own, so the body returns to its BodySlide baseline rather than freezing.
 bool Property ModEnabled = true Auto Hidden
 
 bool Property DebugMode = false Auto Hidden
 bool Property IgnoreMales = true Auto Hidden
 
-; NPC filter toggles. All three default to TRUE -- skipping dead actors and
-; creatures is the conservative default that matches typical user expectation
-; (morph effect on living humanoid NPCs only). Tunable in MCM.
-; Note: "Beast" here means engine-level creature actors (race without the
-; ActorTypeNPC keyword), NOT the playable beast races (Khajiit / Argonian /
-; orc), which carry ActorTypeNPC and stay covered by IgnoreMales.
-; ActorBase.GetSex() only returns -1/0/1 (None/Male/Female) -- it does NOT
-; encode creature-ness, which is why the filter reads the race keyword.
+; NPC filters, all defaulting TRUE (living humanoid NPCs only).
+; "Beast" = engine-level creature (race WITHOUT ActorTypeNPC), not the playable
+; beast races, which carry it and stay under IgnoreMales. GetSex() is only
+; -1/0/1 and does NOT encode creature-ness -- hence the race keyword.
 bool Property IgnoreDead         = true Auto Hidden
 bool Property IgnoreMaleBeast    = true Auto Hidden
 bool Property IgnoreFemaleBeast  = true Auto Hidden
 
-; When true, arousal morphs are scaled down (by UnderArmorScale) on any actor
-; whose chest is covered, so fitted nipples don't clip through the top. "Covered"
-; = wearing a cuirass / body-clothing (vanilla keyword check), unless Advanced
-; Nudity Detection is installed and flags the actor Topless/Nude (override for
-; skimpy / bikini tops). See IsTopCovered in ABM_PlayerAlias.
-; The player alias refreshes instantly on equip/unequip via OnObjectEquipped /
-; OnObjectUnequipped; NPCs collapse on the next heartbeat/poll. Default ON.
+; Scale morphs down by UnderArmorScale while the chest is covered, so fitted
+; nipples don't clip. "Covered" = cuirass / body-clothing keyword, unless
+; Advanced Nudity Detection flags the actor Topless/Nude. See IsTopCovered.
+; The player refreshes on equip/unequip; NPCs on the next heartbeat.
 bool Property SuppressUnderArmor = true Auto Hidden
 
-; Multiplier (0.0 .. 1.0) applied to every arousal morph while the chest is
-; covered (and SuppressUnderArmor is on). 0.0 = nipples fully flat under armor
-; (no clipping); 1.0 = no reduction. MCM-tunable. Default 0.0.
+; Multiplier applied while covered: 0.0 = fully flat (no clipping), 1.0 = no
+; reduction.
 float Property UnderArmorScale = 0.0 Auto Hidden
 float Property DefaultUnderArmorScale = 0.0 AutoReadOnly Hidden
 
@@ -50,55 +38,39 @@ string[] Property MorphNames Auto Hidden
 float[] Property MaxValue Auto Hidden
 float[] Property MaxDefault Auto Hidden
 
-; Install-default slider values = the "Natural" intensity tier (matches
-; IntensityPresets\Natural.json exactly). AutoReadOnly = compiled constants,
-; not cosave-persisted, so an updated .pex changes these on existing saves too
-; (via the per-load ResetDefaults rebuild) without touching the user's tuned
-; MaxValue sliders.
+; Install defaults = the "Natural" tier (matches IntensityPresets\Natural.json).
+; AutoReadOnly = compiled constants, not cosave-persisted, so an updated .pex
+; changes these on existing saves without touching the user's tuned sliders.
 float Property DefaultSize = -0.4 AutoReadOnly Hidden
 float Property DefaultLength = 0.5 AutoReadOnly Hidden
 float Property DefaultCone = 0.8 AutoReadOnly Hidden
 float Property DefaultArea = 0.0 AutoReadOnly Hidden
 
-; Player-only morph poll interval (seconds). SLA NG only broadcasts
-; sla_UpdateComplete on its scheduled scan (default 120s); polling the player
-; in between keeps morphs responsive to mid-scene arousal changes from
-; OSL/OStim, denial ramps, etc. Set to 0 in MCM to disable polling and
-; fall back to the heartbeat-only behaviour.
+; Player poll interval (s). SLA only broadcasts every ~120s, so this keeps the
+; player responsive mid-scene. 0 = heartbeat only.
 float Property PollInterval = 5.0 Auto Hidden
 float Property DefaultPollInterval = 5.0 AutoReadOnly Hidden
 
-; NPC cell-scan radius (units) used by every nearby-NPC sweep
-; (ABM_PlayerAlias.ScanNearbyAroused -- the SLA heartbeat and both directions
-; of the MCM master switch). Default 1000 ~= one room.
-; Range in MCM: 100 (very tight) to 10000 (full exterior cell).
+; NPC cell-scan radius (units) for every nearby sweep. 1000 ~= one room;
+; MCM range 100 to 10000 (full exterior cell).
 float Property ScanCellRadius = 1000.0 Auto Hidden
 float Property DefaultScanCellRadius = 1000.0 AutoReadOnly Hidden
 
-; Last-selected intensity preset (Minimal / Natural / Noticeable / Exaggerated)
-; from the MCM combobox. Display-only -- the actual values are loaded from
-; SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\IntensityPresets\<name>.json
-; into MaxValue[] at selection time. Defaults to "Natural" because the built-in
-; install defaults (DefaultForMorph) ARE the Natural tier, so a fresh install /
-; Reset honestly shows "Natural".
+; Last-selected preset name. Display only -- the values are loaded into
+; MaxValue[] at selection time. "Natural" by default because the built-in
+; defaults ARE that tier, so a fresh install reports honestly.
 String Property IntensityPreset = "Natural" Auto Hidden
 
 
 
 Event OnInit()
-	{First-time setup. Setting all defaults.}
-	;Note: this initialization is performed only once.
-
+	{First-time setup; runs once.}
 	Debug.Notification("Aroused BodyMorphs: first time initialization")
 	Debug.Trace("ABM: first time initialization")
 
-	; OnInit and the MCM "Reset all state" button share the same reset path.
-	; DELIBERATELY do NOT call back into the MCM from this chain. OnInit can
-	; fire during MCM registration (OnConfigRegister -> Quest.Start()), and
-	; calling into the MCM while SkyUI is still mid-registering creates
-	; cross-script lock contention that can wedge the Papyrus VM hard enough
-	; to freeze the game (reproduced in this mod's predecessor). The
-	; user can click "Import Settings" from the MCM at any time afterwards.
+	; Shares the reset path with the MCM's "Reset all state". DELIBERATELY does
+	; NOT call back into the MCM: OnInit can fire during MCM registration, and
+	; the cross-script lock contention froze the game in the predecessor mod.
 	ResetAllState()
 
 	Debug.Notification("Aroused BodyMorphs: initialization complete")
@@ -106,15 +78,10 @@ Event OnInit()
 EndEvent
 
 Function ResetAllState()
-	{Wipe persisted state back to install defaults. Called from OnInit on first install
-	 AND from the MCM "Reset all state" button to recover from corrupt / upgrade-stale state
-	 (None arrays, mismatched morph counts, flags stuck false, etc).
-
-	 This explicitly overwrites toggles to their declared defaults too, since those
-	 persist in the cosave and can hold arbitrary values from a previous version.
-	 Re-runs the alias requirements check at the end so the SLA flags refresh
-	 against the live SLA framework.}
-	; Build the morph table: the full nipple / areola / vagina set.
+	{Wipe persisted state back to install defaults. From OnInit, and from the
+	 MCM's "Reset all state" to recover from corrupt / upgrade-stale state (None
+	 arrays, mismatched counts, flags stuck false). Toggles are overwritten too,
+	 since the cosave can hold arbitrary values from an older version.}
 	; Sets MorphNames, MaxValue, MaxDefault.
 	ApplyMorphSet()
 
@@ -132,16 +99,14 @@ Function ResetAllState()
 	SuppressUnderArmor = true
 	UnderArmorScale   = DefaultUnderArmorScale
 
-	; Re-run requirements check so isNioOk / isSLAroused28 / isSLAroused29 reflect
-	; the live framework state (and on first install, register the mod events + poll).
+	; Refresh the requirement flags against the live framework, and on first
+	; install register the mod events + poll.
 	PlayerAlias.OnPlayerLoadGame()
 EndFunction
 
 Function ResetDefaults()
-	{Rebuild the MaxDefault array to match the current MorphNames set. Called from
-	 OnPlayerLoadGame on every load and from ApplyMorphSet. Derives every entry from
-	 DefaultForMorph so it stays correct whether the table holds the built-in set or
-	 an imported custom one (unknown morphs default to 0).}
+	{Rebuild MaxDefault to match the current MorphNames. Derived from
+	 DefaultForMorph, so it stays right for imported tables too (unknown -> 0).}
 	MaxDefault = new float[128]
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
@@ -151,10 +116,9 @@ Function ResetDefaults()
 EndFunction
 
 String[] Function FullMorphSet()
-	{Ordered full morph-name list (CBBE 3BA slider names). Single source used by
-	 both ApplyMorphSet (install/Reset) and EnsureFullMorphSet (non-destructive
-	 upgrade) so the two never drift. The MCM groups these by area at draw time
-	 (GroupForMorph), so order here only decides ordering within each group.}
+	{The full CBBE 3BA slider list. Single source for ApplyMorphSet and
+	 EnsureFullMorphSet so they can't drift. The MCM groups by area at draw
+	 time, so this order only decides ordering within a group.}
 	String[] names = new String[23]
 	names[0]  = "NippleSize"
 	names[1]  = "NippleLength"
@@ -183,11 +147,9 @@ String[] Function FullMorphSet()
 EndFunction
 
 Function ApplyMorphSet()
-	{(Re)build MorphNames + MaxValue (and MaxDefault via ResetDefaults) to the full
-	 morph set. Every value is reset to its DefaultForMorph default, so this is a full
-	 reset -- only for install / Reset. It does NOT preserve prior slider tuning; use
-	 EnsureFullMorphSet for a non-destructive upgrade. These sliders show in the MCM by
-	 default -- no Import needed. Morphs the body doesn't define are no-ops.}
+	{Rebuild the whole table at default values -- install / Reset only. Does NOT
+	 preserve tuning; use EnsureFullMorphSet for a non-destructive upgrade.
+	 Morphs the body doesn't define are no-ops.}
 	MorphNames = new String[128]
 	MaxValue   = new float[128]
 
@@ -203,11 +165,9 @@ Function ApplyMorphSet()
 EndFunction
 
 Function EnsureFullMorphSet()
-	{Non-destructive upgrade: append any full-set morph not already in the table,
-	 PRESERVING existing names and their tuned MaxValue. New morphs get their
-	 DefaultForMorph default. No caller in 1.0 (a fresh install always holds the
-	 full set) -- kept for future versions that extend FullMorphSet, so an old
-	 save can gain the new sliders without wiping its tuning.}
+	{Non-destructive upgrade: append missing morphs, preserving existing tuning.
+	 No caller yet -- kept so a future FullMorphSet addition can reach old saves
+	 without wiping their sliders.}
 	String[] full = FullMorphSet()
 	Int count = MorphCount()
 	Int i = 0
@@ -219,9 +179,7 @@ Function EnsureFullMorphSet()
 EndFunction
 
 Int Function AddMorphIfMissing(String morphName, Int count)
-	{Append morphName at slot `count` if it's not already present, returning the new
-	 count. Existing entries (and their MaxValue tuning) are untouched. Bounded to the
-	 128 array cap.}
+	{Append morphName if absent, returning the new count. Bounded to 128.}
 	If count >= 128
 		Return count
 	EndIf
@@ -238,11 +196,9 @@ Int Function AddMorphIfMissing(String morphName, Int count)
 EndFunction
 
 Float Function DefaultForMorph(String morphName)
-	{Single source of per-morph default values (Natural tier -- keep in sync with
-	 IntensityPresets\Natural.json). Nipple built-ins use the declared Default*
-	 properties; the extended genital/labia morphs list only the preset's non-zero
-	 values; any other morph (zero-valued preset entries, custom imports) defaults
-	 to 0.}
+	{Per-morph defaults (Natural tier -- keep in sync with Natural.json). Nipples
+	 use the Default* properties; the genital set lists only non-zero values;
+	 everything else defaults to 0.}
 	If morphName == "NippleSize"
 		Return DefaultSize
 	ElseIf morphName == "NippleLength"
@@ -268,8 +224,7 @@ Float Function DefaultForMorph(String morphName)
 EndFunction
 
 Int Function MorphCount()
-	{Number of populated morph slots (stop at the first empty name). Used by the MCM
-	 to sync its render/handler count to whatever the table actually holds.}
+	{Populated morph slots. The MCM syncs its render/handler count to this.}
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
 		i += 1
@@ -278,12 +233,9 @@ Int Function MorphCount()
 EndFunction
 
 Int Function GroupForMorph(String morphName)
-	{Area group of a morph, inferred from its name so imported custom morphs sort
-	 themselves without any extra bookkeeping:
-	   0 = Nipples, 1 = Areolas, 2 = Vagina, 3 = Other.
-	 StringUtil.Find is case-insensitive, so any capitalisation matches. Checked
-	 in priority order -- a name containing both "nipple" and "areola" would land
-	 in Nipples.}
+	{Area group inferred from the name, so imported morphs sort themselves:
+	 0 Nipples, 1 Areolas, 2 Vagina, 3 Other. Find is case-insensitive, and
+	 order is priority -- "nipple" wins over "areola" in one name.}
 	If StringUtil.Find(morphName, "nipple") >= 0
 		Return 0
 	ElseIf StringUtil.Find(morphName, "areola") >= 0

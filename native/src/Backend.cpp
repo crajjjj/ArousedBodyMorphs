@@ -4,13 +4,11 @@ namespace ABM::Backend
 {
 	namespace
 	{
-		// SexlabArousedNG.dll exports (see its include/ArousalAPI.h: extern "C",
-		// resolve via GetProcAddress, never link).
+		// SexlabArousedNG.dll exports (its include/ArousalAPI.h).
 		using SLA_GetArousalInt_t = int32_t (*)(RE::Actor*);
 		using SLA_GetInterfaceVersion_t = uint32_t (*)();
 
-		// OSLAroused.dll exports (see its src/Managers/ArousalManager.h:
-		// extern "C" DLLEXPORT float GetArousalExt(RE::Actor*)).
+		// OSLAroused.dll exports (its src/Managers/ArousalManager.h).
 		using OSL_GetArousalExt_t = float (*)(RE::Actor*);
 
 		std::atomic<Kind>   g_kind{ Kind::kNone };
@@ -33,8 +31,7 @@ namespace ABM::Backend
 				logger::info("Backend: SexLab Aroused NG (C API v{})", apiVersion);
 				return;
 			}
-			// DLL present but too old to export the C API -- fall through to the
-			// other probes; the Papyrus pipeline still covers this install.
+			// Present but too old for the C API -- Papyrus still covers it.
 			logger::warn("SexlabArousedNG.dll found but SLA_GetArousalInt missing (pre-API build?) - staying on the Papyrus path for it");
 		}
 
