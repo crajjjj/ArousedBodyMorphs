@@ -240,7 +240,7 @@ Int Function GroupForMorph(String morphName)
 		Return 0
 	ElseIf StringUtil.Find(morphName, "areola") >= 0
 		Return 1
-	ElseIf StringUtil.Find(morphName, "labia") >= 0 || StringUtil.Find(morphName, "vagina") >= 0 || StringUtil.Find(morphName, "clit") >= 0 || StringUtil.Find(morphName, "innie") >= 0 || StringUtil.Find(morphName, "cute") >= 0
+	ElseIf StringUtil.Find(morphName, "labia") >= 0 || StringUtil.Find(morphName, "vagina") >= 0 || StringUtil.Find(morphName, "pussy") >= 0 || StringUtil.Find(morphName, "clit") >= 0 || StringUtil.Find(morphName, "innie") >= 0 || StringUtil.Find(morphName, "cute") >= 0
 		Return 2
 	EndIf
 	Return 3

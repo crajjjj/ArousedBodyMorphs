@@ -19,6 +19,10 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 - Actor filters (males / dead / creatures), SexLab per-stage morph bump
 - JSON import/export of settings and custom morph tables — imported morphs are
   auto-grouped by name
+- Body-agnostic: any BodySlide-built body works via a custom morph table.
+  Ready-made **UBE 2.0** and **BHUNP** patches live in [patches/](patches/) —
+  install one as a separate mod after ABM and hit MCM → Import (sliders a body
+  doesn't define are silent no-ops, so mixed-body load orders can merge tables)
 - Debug lesser power that dumps an actor's morph state to the Papyrus log
 - **Optional native SKSE layer** ([native/](native/)): event-driven updates via
   OSL Aroused's per-actor arousal events or SLA NG's C API, with all morph
@@ -41,6 +45,9 @@ dist/                 The installable mod (MO2-ready): ESP, scripts, JSON preset
                       ABM_ConfigMenu, ABM_DebugSpellEffect)
   scripts/            Compiled .pex output
   SKSE/...            Intensity presets + sample morph.json
+patches/              Data-only body patches, each zipped separately (morph
+                      table + presets renamed to that body's sliders; no
+                      plugin, no scripts): UBE/ (UBE 2.0), BHUNP/
 skyrimse.ppj          Papyrus project: compiles dist/source → dist/scripts and
                       zips dist/ into Release/ArousedBodyMorphs.zip
 native/               Optional SKSE DLL (xmake + CommonLibSSE-NG submodule);
