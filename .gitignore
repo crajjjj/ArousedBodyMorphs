@@ -8,3 +8,7 @@ native/compile_commands.json
 # Native build output (shipped via release asset, not tracked)
 dist/SKSE/Plugins/*.dll
 dist/SKSE/Plugins/*.pdb
+
+# VS Code
+.vscode/
+*.code-workspace
