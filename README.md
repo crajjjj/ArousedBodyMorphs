@@ -14,9 +14,11 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 - Intensity presets (Minimal / Natural / Noticeable / Exaggerated)
 - Master on/off switch that fully clears the mod's morphs when disabled
 - Player poll for mid-scene responsiveness (SLA only broadcasts every ~120 s)
-- Under-armor suppression with smooth reveal tween; Advanced Nudity Detection
-  aware
-- Actor filters (males / dead / creatures), SexLab per-stage morph bump
+- Under-armor suppression with smooth reveal tween; any worn item with a
+  cuirass / body-clothing keyword counts as a top, and Advanced Nudity Detection
+  (Nude / Topless / Showing Breasts) overrides it back to bare for skimpy tops
+  and for keyworded accessories
+- Actor filters (males / dead / creatures)
 - JSON import/export of settings and custom morph tables — imported morphs are
   auto-grouped by name
 - Body-agnostic: any BodySlide-built body works via a custom morph table.

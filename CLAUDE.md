@@ -63,6 +63,21 @@ Event-driven replacement for the Papyrus update pipeline; see
   in BOTH pipelines. `ActorBase.GetSex()` returns only -1/0/1
   (None/Male/Female) — the folkloric 2/3 creature codes do not exist; never
   reintroduce a `sex == 2/3` beast filter.
+- **"Top covered" test:** the `ArmorCuirass` / `ClothingBody` keyword check
+  scans **every worn item**, in BOTH pipelines (`Actor.WornHasKeyword` in
+  Papyrus; one `GetInventory` walk over worn armor in the DLL). 1.0.5 narrowed
+  it to the slot-32 item to drop corsets/piercings that merely inherited
+  `ClothingBody`, and that was wrong: in a real load order ~59 bras and tops sit
+  on slot 56 and ~65 on slot 46 with slot 32 empty, so they stopped suppressing
+  and inflated through the armor. SLA NG agrees — `slamainscr.
+  IsActorNakedExtended` checks slot 32 and then seven auxiliary slots (44, 45,
+  48, 49, 52, 56, 58). Do not re-narrow it to one slot.
+- Advanced Nudity Detection is the OVERRIDE on top of that (covered → bare),
+  on any of Nude `0x831` / Topless `0x832` / ShowingChest `0x82F` at rank 1.
+  ShowingChest is AND's "Showing Breasts" — it catches an open-front or skimpy
+  top AND the inherited-keyword accessories, since both leave the breasts
+  visible, so it must stay in the set. Without AND those accessories read as a
+  top again; that is the accepted trade.
 - CommonLibSSE-NG vendored as submodule at `native\lib\commonlibsse-ng`
   (alandtse fork, `ng` branch, currently v8.0.1).
 

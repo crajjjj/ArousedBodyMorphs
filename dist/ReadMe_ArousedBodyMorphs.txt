@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.4
+Aroused BodyMorphs 1.0.5
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -43,8 +43,12 @@ Features
 - Player poll (default 5s, configurable, 0 = off) for mid-scene responsiveness;
   NPCs update on SexLab Aroused's scan tick
 - Under-armor suppression: morphs scale down (default: flat) while the chest is
-  covered, with a smooth ~1s reveal when the top comes off; Advanced Nudity
-  Detection aware
+  covered, with a smooth ~1s reveal when the top comes off. Any worn item with
+  a cuirass / body-clothing keyword counts, so bras and bikini tops that sit on
+  an auxiliary slot instead of the body slot are caught too. With Advanced
+  Nudity Detection installed a top still reads as bare while AND reports Nude,
+  Topless or Showing Breasts -- that covers skimpy and open-front tops, and
+  also corsets and piercings that only inherited the keyword
 - Actor filters: ignore males / dead / male beasts / female beasts;
   NPC scan radius (0 = player only)
 - Translated MCM in 11 languages: English, Chinese, Czech, French, German,

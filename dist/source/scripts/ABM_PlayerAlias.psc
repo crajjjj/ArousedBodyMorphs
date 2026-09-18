@@ -16,6 +16,7 @@ slaFrameworkScr Property sla_Framework Auto
 Bool AND_Resolved = false
 Faction AND_Nude
 Faction AND_Topless
+Faction AND_ShowingChest
 Keyword kwArmorCuirass
 Keyword kwClothingBody
 
@@ -384,15 +385,17 @@ EndFunction
 
 Function ResolveNudityDetection()
 	{Resolve the AND factions, the vanilla body keywords and ActorTypeNPC, per
-	 load. The AND formIDs (0x831 Nude, 0x832 Topless) match what SLA NG itself
-	 resolves -- AND owns them, so any SLA fork works.}
+	 load. The AND formIDs (0x831 Nude, 0x832 Topless, 0x82F ShowingChest) match
+	 what SLA NG itself resolves -- AND owns them, so any SLA fork works.}
 	AND_Resolved = false
 	AND_Nude = None
 	AND_Topless = None
+	AND_ShowingChest = None
 	If Game.GetModByName("Advanced Nudity Detection.esp") != 255
-		AND_Nude    = Game.GetFormFromFile(0x831, "Advanced Nudity Detection.esp") as Faction
-		AND_Topless = Game.GetFormFromFile(0x832, "Advanced Nudity Detection.esp") as Faction
-		AND_Resolved = (AND_Nude != None) || (AND_Topless != None)
+		AND_Nude         = Game.GetFormFromFile(0x831, "Advanced Nudity Detection.esp") as Faction
+		AND_Topless      = Game.GetFormFromFile(0x832, "Advanced Nudity Detection.esp") as Faction
+		AND_ShowingChest = Game.GetFormFromFile(0x82F, "Advanced Nudity Detection.esp") as Faction
+		AND_Resolved = (AND_Nude != None) || (AND_Topless != None) || (AND_ShowingChest != None)
 		If MainQuest.DebugMode
 			debug.Trace("ABM: Advanced Nudity Detection found, top-nudity gating enabled")
 		EndIf
@@ -405,21 +408,50 @@ EndFunction
 Bool Function IsTopCovered(Actor who)
 	{True when the chest is covered, so the morphs scale down and don't clip.
 
-	 Mirrors slamainscr.IsActorNaked: the worn-keyword check is primary and AND
-	 only OVERRIDES covered -> bare. AND is deliberately not the sole authority --
-	 its NPC factions come from a periodic player-cast scan, so an unscanned or
-	 just-stripped NPC has no Topless rank and would wrongly read covered. Naked
-	 bodies / SOS carry neither keyword, so they read bare.}
+	 EVERY worn item is tested, not just the body slot (32). Restricting this to
+	 slot 32 looks tempting -- it drops corsets and piercings that only inherited
+	 ClothingBody from whatever template they were built from -- but it throws
+	 away far more than it fixes: bras, sport tops and bikini tops routinely live
+	 on slot 46 or 56 with slot 32 empty, and those would inflate straight
+	 through. SLA NG reaches the same conclusion, scanning seven auxiliary slots
+	 past 32 in slamainscr.IsActorNakedExtended.
+
+	 The inherited-keyword accessories are AND's job instead: a corset or a
+	 piercing leaves the breasts visible, so AND ranks the actor ShowingChest and
+	 the override below puts it back to bare. Without AND installed they read as
+	 a top again, which is the old behaviour and the conservative direction.
+
+	 Mirrors slamainscr.IsActorNaked: the keyword check is primary and AND only
+	 OVERRIDES covered -> bare. AND is deliberately not the sole authority -- its
+	 NPC factions come from a periodic player-cast scan, so an unscanned or
+	 just-stripped NPC has no rank and would wrongly read covered. Naked bodies /
+	 SOS carry neither keyword, so they read bare.}
 	If !(who.WornHasKeyword(kwArmorCuirass) || who.WornHasKeyword(kwClothingBody))
 		Return false
 	EndIf
-	; A top is worn -- let AND override to bare for skimpy / bikini tops.
-	If AND_Resolved
-		If (AND_Nude && who.GetFactionRank(AND_Nude) == 1) || (AND_Topless && who.GetFactionRank(AND_Topless) == 1)
-			Return false
-		EndIf
+	; Something with a top keyword is worn -- let AND override to bare for skimpy
+	; and open-front tops, and for accessories that only inherited the keyword.
+	Return !ANDSaysBare(who)
+EndFunction
+
+Bool Function ANDSaysBare(Actor who)
+	{True when Advanced Nudity Detection reports the chest as exposed. Nude and
+	 Topless mean nothing on the chest at all; ShowingChest (AND's "Showing
+	 Breasts" line) is the one that catches a top which IS worn but leaves the
+	 breasts out -- the whole point of the override, and previously missed.}
+	If !AND_Resolved
+		Return false
 	EndIf
-	Return true
+	If AND_Nude && who.GetFactionRank(AND_Nude) == 1
+		Return true
+	EndIf
+	If AND_Topless && who.GetFactionRank(AND_Topless) == 1
+		Return true
+	EndIf
+	If AND_ShowingChest && who.GetFactionRank(AND_ShowingChest) == 1
+		Return true
+	EndIf
+	Return false
 EndFunction
 
 Event OnObjectEquipped(Form akBaseObject, ObjectReference akReference)

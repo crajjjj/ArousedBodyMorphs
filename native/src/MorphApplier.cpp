@@ -21,6 +21,7 @@ namespace ABM::MorphApplier
 		RE::BGSKeyword* g_kwActorTypeNPC = nullptr;
 		RE::TESFaction* g_andNude = nullptr;
 		RE::TESFaction* g_andTopless = nullptr;
+		RE::TESFaction* g_andShowingChest = nullptr;
 
 		bool HasFactionRankOne(RE::Actor* who, RE::TESFaction* faction)
 		{
@@ -38,25 +39,51 @@ namespace ABM::MorphApplier
 			return match;
 		}
 
-		// Mirror of ABM_PlayerAlias.IsTopCovered: keyword check first, AND
-		// only OVERRIDES covered->bare. Papyrus uses WornHasKeyword (any item);
-		// these keywords live on body-slot armor, so slot 32 is equivalent.
+		// True when AND reports the chest exposed. Nude/Topless mean nothing on
+		// the chest at all; ShowingChest is the one that catches a top that IS
+		// worn but leaves the breasts out, which is the point of the override.
+		bool ANDSaysBare(RE::Actor* who)
+		{
+			return HasFactionRankOne(who, g_andNude) ||
+			       HasFactionRankOne(who, g_andTopless) ||
+			       HasFactionRankOne(who, g_andShowingChest);
+		}
+
+		// Papyrus Actor.WornHasKeyword, for either top keyword in one pass.
+		// Every worn slot counts, not just 32: bras and bikini tops routinely
+		// sit on 46 or 56 with the body slot empty. One GetInventory walk is
+		// what a single GetWornArmor call already costs.
+		bool WornHasTopKeyword(RE::Actor* who)
+		{
+			const auto inv = who->GetInventory([](RE::TESBoundObject& a_object) {
+				return a_object.IsArmor();
+			});
+
+			for (const auto& [item, invData] : inv) {
+				const auto& [count, entry] = invData;
+				if (count > 0 && entry && entry->IsWorn()) {
+					const auto armor = item->As<RE::TESObjectARMO>();
+					if (armor &&
+						((g_kwArmorCuirass && armor->HasKeyword(g_kwArmorCuirass)) ||
+							(g_kwClothingBody && armor->HasKeyword(g_kwClothingBody)))) {
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		// Mirror of ABM_PlayerAlias.IsTopCovered: the keyword check is primary,
+		// AND only OVERRIDES covered->bare. AND is what demotes an accessory
+		// that merely inherited ClothingBody (a corset, a piercing) back to
+		// bare, since it leaves the breasts visible and so ranks ShowingChest.
 		bool IsTopCovered(RE::Actor* who)
 		{
-			auto wornBody = who->GetWornArmor(RE::BGSBipedObjectForm::BipedObjectSlot::kBody);
-			if (!wornBody) {
-				return false;
-			}
-			bool keyworded = (g_kwArmorCuirass && wornBody->HasKeyword(g_kwArmorCuirass)) ||
-			                 (g_kwClothingBody && wornBody->HasKeyword(g_kwClothingBody));
-			if (!keyworded) {
+			if (!WornHasTopKeyword(who)) {
 				// Naked-body armors / SOS carry neither keyword -> bare.
 				return false;
 			}
-			if (HasFactionRankOne(who, g_andNude) || HasFactionRankOne(who, g_andTopless)) {
-				return false;
-			}
-			return true;
+			return !ANDSaysBare(who);
 		}
 
 		// Filters + arousal read + under-armor scale. No SKEE calls, so safe
@@ -196,10 +223,11 @@ namespace ABM::MorphApplier
 			// Same formIDs SLA NG resolves in slamainscr.psc -- AND owns them.
 			g_andNude = dataHandler->LookupForm<RE::TESFaction>(0x831, AND_PLUGIN);
 			g_andTopless = dataHandler->LookupForm<RE::TESFaction>(0x832, AND_PLUGIN);
+			g_andShowingChest = dataHandler->LookupForm<RE::TESFaction>(0x82F, AND_PLUGIN);
 		}
 		logger::info("Form lookups: cuirass={} clothing={} actorTypeNPC={} AND={}",
 			g_kwArmorCuirass != nullptr, g_kwClothingBody != nullptr,
-			g_kwActorTypeNPC != nullptr, g_andNude || g_andTopless);
+			g_kwActorTypeNPC != nullptr, g_andNude || g_andTopless || g_andShowingChest);
 	}
 
 	bool SkeeReady()

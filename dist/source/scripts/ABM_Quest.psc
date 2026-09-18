@@ -24,8 +24,10 @@ bool Property IgnoreMaleBeast    = true Auto Hidden
 bool Property IgnoreFemaleBeast  = true Auto Hidden
 
 ; Scale morphs down by UnderArmorScale while the chest is covered, so fitted
-; nipples don't clip. "Covered" = cuirass / body-clothing keyword, unless
-; Advanced Nudity Detection flags the actor Topless/Nude. See IsTopCovered.
+; nipples don't clip. "Covered" = a cuirass / body-clothing keyword on ANY worn
+; item -- tops sit on slots 46 and 56 as often as on 32 -- unless Advanced
+; Nudity Detection flags the actor Nude / Topless / Showing Breasts, which is
+; what demotes a keyworded accessory back to bare. See IsTopCovered.
 ; The player refreshes on equip/unequip; NPCs on the next heartbeat.
 bool Property SuppressUnderArmor = true Auto Hidden
 
