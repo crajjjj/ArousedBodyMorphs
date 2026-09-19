@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.5
+Aroused BodyMorphs 1.0.6
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs

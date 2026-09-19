@@ -386,18 +386,23 @@ EndFunction
 Function ResolveNudityDetection()
 	{Resolve the AND factions, the vanilla body keywords and ActorTypeNPC, per
 	 load. The AND formIDs (0x831 Nude, 0x832 Topless, 0x82F ShowingChest) match
-	 what SLA NG itself resolves -- AND owns them, so any SLA fork works.}
-	AND_Resolved = false
-	AND_Nude = None
-	AND_Topless = None
-	AND_ShowingChest = None
-	If Game.GetModByName("Advanced Nudity Detection.esp") != 255
-		AND_Nude         = Game.GetFormFromFile(0x831, "Advanced Nudity Detection.esp") as Faction
-		AND_Topless      = Game.GetFormFromFile(0x832, "Advanced Nudity Detection.esp") as Faction
-		AND_ShowingChest = Game.GetFormFromFile(0x82F, "Advanced Nudity Detection.esp") as Faction
-		AND_Resolved = (AND_Nude != None) || (AND_Topless != None) || (AND_ShowingChest != None)
-		If MainQuest.DebugMode
+	 what SLA NG itself resolves -- AND owns them, so any SLA fork works.
+
+	 NEVER gate this on Game.GetModByName("Advanced Nudity Detection.esp") != 255.
+	 AND ships ESL-FLAGGED, and GetModByName returns 255 for every light plugin,
+	 so that guard silently skipped the whole resolve and left AND_Resolved false
+	 -- the override was dead for everyone. GetFormFromFile DOES resolve light
+	 plugins (SKSE masks the local id into 0xFExxx###), so a non-None faction is
+	 itself the install test, and it works for an ESP and an ESL alike.}
+	AND_Nude         = Game.GetFormFromFile(0x831, "Advanced Nudity Detection.esp") as Faction
+	AND_Topless      = Game.GetFormFromFile(0x832, "Advanced Nudity Detection.esp") as Faction
+	AND_ShowingChest = Game.GetFormFromFile(0x82F, "Advanced Nudity Detection.esp") as Faction
+	AND_Resolved = (AND_Nude != None) || (AND_Topless != None) || (AND_ShowingChest != None)
+	If MainQuest.DebugMode
+		If AND_Resolved
 			debug.Trace("ABM: Advanced Nudity Detection found, top-nudity gating enabled")
+		Else
+			debug.Trace("ABM: Advanced Nudity Detection not installed, top-nudity gating off")
 		EndIf
 	EndIf
 	kwArmorCuirass = Keyword.GetKeyword("ArmorCuirass")

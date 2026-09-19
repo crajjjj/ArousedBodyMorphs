@@ -74,6 +74,12 @@ Event-driven replacement for the Papyrus update pipeline; see
   48, 49, 52, 56, 58). Do not re-narrow it to one slot.
 - Advanced Nudity Detection is the OVERRIDE on top of that (covered → bare),
   on any of Nude `0x831` / Topless `0x832` / ShowingChest `0x82F` at rank 1.
+  **AND ships ESL-flagged**, so `Game.GetModByName("Advanced Nudity Detection.
+  esp")` returns 255 and must never guard the resolve — that was the 1.0.5 bug
+  that left `AND_Resolved` false and the whole override dead. `GetFormFromFile`
+  resolves light plugins fine, so a non-None faction IS the install test. The
+  DLL is unaffected: CommonLib's `LookupFormID` handles `compileIndex == 0xFE`
+  and folds in `smallFileCompileIndex << 12`.
   ShowingChest is AND's "Showing Breasts" — it catches an open-front or skimpy
   top AND the inherited-keyword accessories, since both leave the breasts
   visible, so it must stay in the set. Without AND those accessories read as a
