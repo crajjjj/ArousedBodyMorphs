@@ -12,7 +12,7 @@
 
 set_xmakever("3.0.0")
 
-set_version("1.1.0") -- keep in step with ../dist/meta.ini
+set_version("1.1.1") -- keep in step with ../dist/meta.ini
 set_license("GPL-3.0")
 
 set_arch("x64")

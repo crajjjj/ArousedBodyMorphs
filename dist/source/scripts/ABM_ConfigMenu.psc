@@ -49,7 +49,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10100
+	return 10101
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -65,16 +65,25 @@ Event OnVersionUpdate(Int ver)
 	debug.Trace("ABM: Updating to "+version)
 EndEvent
 
+; Registration hooks: SkyUI walks EVERY installed MCM in one pass, so anything
+; slow here is charged against that pass -- which is how a menu ends up lagging
+; or never registering at all on a new game. Keep both of these to page setup
+; and traces; notifications, cross-script reads and setup work do not belong in
+; them. ABM_Quest.OnInit splits itself for the same reason.
 Event OnConfigInit()
-	debug.Notification("Aroused BodyMorphs: Registering MCM. This could take a while.")
-	debug.Trace("ABM: Registering MCM. This could take a while.")
+	debug.Trace("ABM: registering MCM")
 EndEvent
 
 event OnConfigRegister()
-	debug.Notification("Aroused BodyMorphs: MCM registered!")
-	debug.Trace("ABM: MCM registered!")
+	debug.Trace("ABM: MCM registered")
 	SetupPages()
 	oidMaxValue = new int[128]
+	; NOT the way the mod starts any more -- ABM_MainQuest is Start Game Enabled
+	; in the ESP, so the engine starts it and the whole setup runs whether or not
+	; SkyUI ever registers this menu. This stays purely as a recovery line for a
+	; save made before 1.1.1 whose MCM never registered, leaving the quest known
+	; to the save but never started, where the engine won't start it on its own.
+	; A no-op on every other save: Start() does nothing to a running quest.
 	MainQuest.start()
 endEvent
 
@@ -393,13 +402,13 @@ state State_Reset
 	event OnSelectST()
 		MainQuest.ResetAllState()
 		; Drop the debug power here, now. ResetAllState forces DebugMode off but
-		; cannot remove the power itself: it also runs from Quest.OnInit, where
-		; calling back into this menu mid-registration froze the game in the
+		; cannot remove the power itself: the quest must never call back into
+		; this menu -- that cross-script contention froze the game in the
 		; predecessor mod. That constraint is on the QUEST, though -- we ARE the
 		; menu, and we own the spell property, so the reset button can just do it
 		; rather than leave the toggle and the Powers list disagreeing until the
-		; next menu close. (OnInit's own reset never needs this: nothing was ever
-		; granted on a first install.)
+		; next menu close. (First-install setup never needs this: nothing was
+		; ever granted.)
 		Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
 		If pc
 			pc.RemoveSpell(DebugSpell)

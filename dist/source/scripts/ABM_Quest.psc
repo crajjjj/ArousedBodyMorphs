@@ -86,24 +86,57 @@ String Property IntensityPreset = "Natural" Auto Hidden
 
 
 Event OnInit()
-	{First-time setup; runs once.}
-	Debug.Notification("Aroused BodyMorphs: first time initialization")
+	{First-time setup; runs once, when the ENGINE starts this quest -- it is
+	 Start Game Enabled in the ESP, so the mod comes up on a new game (and on a
+	 mid-playthrough install) without SkyUI being involved at all. The MCM keeps
+	 a Start() call only as a recovery line for old saves; see there.
+
+	 Deliberately SHORT, and it must stay that way. It still lands in the busiest
+	 moment of a game start, alongside SkyUI registering every installed MCM, so
+	 work done here competes with that: a long chain is how a menu ends up
+	 lagging, or never registering at all. So OnInit only builds this script's
+	 own state, and everything that reaches OUTSIDE it -- the framework lookup,
+	 the NiOverride probe, the AND form resolves, mod-event registration, the
+	 poll, the native push -- waits for OnUpdate one second later. It also never
+	 calls back into the MCM: that cross-script lock contention froze the game in
+	 the predecessor mod.}
 	Debug.Trace("ABM: first time initialization")
+	ResetStoredState()
+	RegisterForSingleUpdate(1.0)
+EndEvent
 
-	; Shares the reset path with the MCM's "Reset all state". DELIBERATELY does
-	; NOT call back into the MCM: OnInit can fire during MCM registration, and
-	; the cross-script lock contention froze the game in the predecessor mod.
-	ResetAllState()
-
+Event OnUpdate()
+	{The deferred half of OnInit, running once SkyUI's registration pass is done.
+	 Only ever armed by OnInit -- nothing else in this script uses the update
+	 slot.}
+	Debug.Trace("ABM: running deferred first-time setup")
+	PlayerAlias.OnPlayerLoadGame()
 	Debug.Notification("Aroused BodyMorphs: initialization complete")
-	debug.Trace("ABM: initialization complete")
+	Debug.Trace("ABM: initialization complete")
 EndEvent
 
 Function ResetAllState()
-	{Wipe persisted state back to install defaults. From OnInit, and from the
-	 MCM's "Reset all state" to recover from corrupt / upgrade-stale state (None
-	 arrays, mismatched counts, flags stuck false). Toggles are overwritten too,
-	 since the cosave can hold arbitrary values from an older version.}
+	{Wipe persisted state back to install defaults AND re-run the requirement
+	 check. The MCM's "Reset all state" entry point, for recovering from corrupt
+	 / upgrade-stale state (None arrays, mismatched counts, flags stuck false).
+
+	 Synchronous on purpose: the user is watching the menu and expects the
+	 Requirements rows to be right when it redraws. OnInit takes the split path
+	 instead -- see there.}
+	ResetStoredState()
+
+	; Refresh the requirement flags against the live framework, and on first
+	; install register the mod events + poll.
+	PlayerAlias.OnPlayerLoadGame()
+EndFunction
+
+Function ResetStoredState()
+	{The data half of a reset: this script's own tables and toggles, with no
+	 reach outside it beyond the suppress.json read. Split from ResetAllState so
+	 OnInit can run it inside SkyUI's registration pass and defer the rest.
+
+	 Toggles are overwritten too, since the cosave can hold arbitrary values
+	 from an older version.}
 	; Sets MorphNames, MaxValue, MaxDefault.
 	ApplyMorphSet()
 
@@ -120,10 +153,6 @@ Function ResetAllState()
 	IntensityPreset   = "Natural"
 	SuppressUnderArmor = true
 	UnderArmorScale   = DefaultUnderArmorScale
-
-	; Refresh the requirement flags against the live framework, and on first
-	; install register the mod events + poll.
-	PlayerAlias.OnPlayerLoadGame()
 EndFunction
 
 Function ResetDefaults()
@@ -132,6 +161,15 @@ Function ResetDefaults()
 	 and the suppression flags. Both live here rather than in separate calls so
 	 no path can refresh one and leave the other stale.}
 	MaxDefault = new float[128]
+	If !MorphNames
+		; Corrupt / not-yet-built table (the state "Reset all state" exists to
+		; recover from). Indexing it would throw, and this runs on the load path
+		; now, so it would take the rest of OnPlayerLoadGame -- requirements, SLA
+		; flavor, the poll -- down with it. RebuildMorphTables bails on the same
+		; condition after allocating, so the flags array still ends up valid.
+		RebuildMorphTables()
+		return
+	EndIf
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
 		MaxDefault[i] = DefaultForMorph(MorphNames[i])

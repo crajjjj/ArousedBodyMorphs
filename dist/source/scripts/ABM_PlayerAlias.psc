@@ -129,10 +129,11 @@ Event OnPlayerLoadGame()
 	PlayerRef = None
 	GetPlayerRef()
 
-	; Re-read suppress.json for this session. Before the abort paths below so an
-	; edited file lands even when a requirement check later fails, and cheap: one
-	; JSON read plus a pass over the table, once per load.
-	MainQuest.RebuildMorphTables()
+	; Rebuild the derived tables (slider defaults + the resolved suppress.json)
+	; for this session: ONE pass per load, here, before the abort paths below so
+	; an edited file lands even when a requirement check later fails. Costs one
+	; JSON read plus a walk of the table.
+	MainQuest.ResetDefaults()
 
 	if MainQuest.DebugMode
 		debug.Notification("Aroused BodyMorphs: checking for requirements")
@@ -169,9 +170,8 @@ Function ResolveSlaFlavor()
 	 init has run once: slaInternalScr.OnInit arms +5s, Maintenance enters the
 	 "initializing" state and arms +10s, and only that tick calls SetVersion.
 	 OnPlayerLoadGame fires in the first second of the load, so on the FIRST
-	 session after installing that fork we read 0 -- and
-	 aborting there switched the mod off for the WHOLE session, until another
-	 save + reload. Forks that return a literal (OSL Aroused, SLAXSE2022) never
+	 session after installing that fork we read 0 -- and aborting there switched
+	 the mod off for the WHOLE session, until another save + reload. Forks that return a literal (OSL Aroused, SLAXSE2022) never
 	 showed it, which is why this read as fork-specific. So a present framework
 	 reporting 0 is retried, not aborted.}
 	slaFrameworkScr framework = GetFramework()
@@ -221,7 +221,9 @@ Function ResolveSlaFlavor()
 	endif
 
 	;success
-	MainQuest.ResetDefaults()
+	; No ResetDefaults here: OnPlayerLoadGame already rebuilt the derived tables
+	; for this load, and on the retry path this runs up to a minute later, so a
+	; second rebuild is a wasted JSON read, not a refresh.
 
 	; Re-run per load so an AND install/uninstall since the last save is seen.
 	ResolveNudityDetection()

@@ -116,6 +116,28 @@ Event-driven replacement for the Papyrus update pipeline; see
 - CommonLibSSE-NG vendored as submodule at `native\lib\commonlibsse-ng`
   (alandtse fork, `ng` branch, currently v8.0.1).
 
+## MCM init weight
+
+SkyUI registers EVERY installed MCM in one pass, so anything slow in
+`OnConfigInit` / `OnConfigRegister` is charged against that pass -- which is how
+a menu ends up lagging or never registering at all on a new game. Reference
+implementation: SL Widgets' `slw_menu.psc` sets `ModName` plus one notification
+and nothing else, builds `Pages` in `OnConfigOpen`, and leaves every
+cross-script read to `OnPageReset`.
+
+Ours follows that:
+- Both registration hooks are a trace plus page setup. No notifications, no
+  cross-script reads, no setup work.
+- `ABM_MainQuest` is Start Game Enabled, so the engine starts the mod
+  independently of SkyUI (the MCM `Start()` call is a legacy-save fallback).
+- `ABM_Quest.OnInit` splits itself: its own tables inline, and everything that
+  reaches outside the script (framework lookup, NiOverride probe, AND form
+  resolves, mod events, poll, native push) deferred to `OnUpdate` a second
+  later. `ResetAllState` keeps the synchronous path for the MCM's Reset button.
+- The derived tables are rebuilt ONCE per load, in `OnPlayerLoadGame`. Do not
+  add a second rebuild elsewhere -- `ResolveSlaFlavor` used to carry one, and on
+  the retry path it fired up to a minute later for no gain.
+
 ## Bumping the Version
 
 Four places hold the version — keep in sync:
@@ -162,7 +184,7 @@ native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 |--------|------|----------|-------|
 | 0x800 | MagicEffect | `ABM_DebugSpellEffect` | Script archetype; script `ABM_DebugSpellEffect`, property `PlayerAlias` → quest 0x802 alias 0 |
 | 0x801 | Spell | `ABM_DebugSpell` | Lesser power, effect → 0x800 |
-| 0x802 | Quest | `ABM_MainQuest` | RunOnce, NOT start-game-enabled (started by the MCM's `OnConfigRegister`). Player alias 0 with script `ABM_PlayerAlias` (props: `MainQuest`, `sla_Framework`); quest script `ABM_Quest` (prop `PlayerAlias`) |
+| 0x802 | Quest | `ABM_MainQuest` | StartGameEnabled + RunOnce (DNAM flags `0x0101`). The ENGINE starts it, so the mod comes up without SkyUI; the MCM's `MainQuest.Start()` is only a recovery line for pre-1.1.1 saves whose MCM never registered. Player alias 0 with script `ABM_PlayerAlias` (props: `MainQuest`, `sla_Framework`); quest script `ABM_Quest` (prop `PlayerAlias`) |
 | 0x803 | Quest | `ABM_ConfigMenuQuest` | StartGameEnabled + RunOnce. Script `ABM_ConfigMenu` (props: `ModName`="Aroused BodyMorphs", `MainQuest`, `DebugSpell`); alias 0 carries SkyUI's `SKI_PlayerLoadGameAlias` |
 
 Masters: Skyrim.esm, Update.esm, SexLabAroused.esm. (Deliberately NOT
