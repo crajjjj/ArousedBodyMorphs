@@ -49,7 +49,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10006
+	return 10100
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -237,12 +237,14 @@ Function DrawGeneralPage()
 
 	AddHeaderOption("$ABM_Hdr_UnderArmor")
 	oidSuppressUnderArmor = AddToggleOption("$ABM_Opt_SuppressUnderArmor", MainQuest.SuppressUnderArmor, hasReqFlag)
-	; Slider stays visible but disabled while suppression is off, so its role is clear.
+	; Slider stays visible but disabled while suppression is off, so its role is
+	; clear. WHICH morphs it reaches is suppress.json's business, not an option
+	; here -- see ABM_Quest.RebuildMorphTables.
 	int uaFlag = hasReqFlag
 	if !MainQuest.SuppressUnderArmor
 		uaFlag = OPTION_FLAG_DISABLED
 	endif
-	oidUnderArmorScale = AddSliderOption("$ABM_Opt_NippleSizeUnderArmor", MainQuest.UnderArmorScale, "{2}", uaFlag)
+	oidUnderArmorScale = AddSliderOption("$ABM_Opt_UnderArmorScale", MainQuest.UnderArmorScale, "{2}", uaFlag)
 
 	AddHeaderOption("$ABM_Hdr_Performance")
 	oidPollInterval   = AddSliderOption("$ABM_Opt_PollInterval", MainQuest.PollInterval, "{1}", hasReqFlag)
@@ -477,7 +479,7 @@ event OnOptionSelect(int option)
 	elseif option == oidSuppressUnderArmor
 		MainQuest.SuppressUnderArmor = !MainQuest.SuppressUnderArmor
 		SetToggleOptionValue(option,MainQuest.SuppressUnderArmor)
-		; Redraw so the "Nipple size under armor" slider enables/disables to match.
+		; Redraw so the "Morph scale under armor" slider enables/disables to match.
 		ForcePageReset()
 		return
 	endif

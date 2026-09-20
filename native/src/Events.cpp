@@ -135,7 +135,9 @@ namespace ABM::Events
 					return RE::BSEventNotifyControl::kContinue;
 				}
 				auto cfg = Settings::Snapshot();
-				if (!cfg->modEnabled || !cfg->suppressUnderArmor) {
+				// Mirrors ABM_Quest.UnderArmorActive(): with no morph flagged,
+				// an armor change can't alter a single value.
+				if (!cfg->modEnabled || !cfg->suppressUnderArmor || !cfg->anySuppressed) {
 					return RE::BSEventNotifyControl::kContinue;
 				}
 				auto form = RE::TESForm::LookupByID(event->baseObject);

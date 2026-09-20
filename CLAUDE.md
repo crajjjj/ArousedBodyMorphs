@@ -49,16 +49,45 @@ Event-driven replacement for the Papyrus update pipeline; see
   coalesce through an `exchange(true)` pending flag.
 - **Unchanged-value skip:** both pipelines skip the morph writes + model
   rebuild when the values are already applied. Every slot is
-  `maxValue[i] * factor` with one shared `factor` (`arousal/100 *
-  armorScale`), so ONE slot settles it: read the first non-zero-max morph
-  back under our key (`NiOverride.GetBodyMorph` / `IBodyMorphInterface::
-  GetMorph`) and compare to the target, tolerance 1e-6. **Deliberately no
-  cache** — SKEE is the single source of truth, so nothing needs
-  invalidating on a settings push, a save load, or an external clear, and
-  the comparison target moves with the settings by construction. Do not
-  "optimize" this back into a remembered value: the probe is one call
-  against 23 writes plus a mesh rebuild, and every cached variant of it grew
-  a staleness bug.
+  `maxValue[i] * factor` with exactly TWO factors in play - `arousal/100 *
+  armorScale` for the morphs `suppress.json` covers, and `arousal/100` for
+  the rest - so ONE PROBE PER FACTOR settles it: read the first non-zero-max
+  morph of each class back under our key (`NiOverride.GetBodyMorph` /
+  `IBodyMorphInterface::GetMorph`) and compare to its target, tolerance 1e-6.
+  A single probe was enough only while one factor covered the whole table;
+  with a mixed flag set it misses every change confined to the other factor
+  (bare <-> covered while the probe sits in an unsuppressed morph), so do not
+  collapse it back. When `armorScale == 1.0` the two factors coincide and the
+  flags are not even read.
+  **Deliberately no cache** - SKEE is the single source of truth, so nothing
+  needs invalidating on a settings push, a save load, or an external clear,
+  and the comparison targets move with the settings by construction. Do not
+  "optimize" this back into a remembered value: the probes are one or two
+  calls against 23 writes plus a mesh rebuild, and every cached variant of
+  it grew a staleness bug.
+- **What under-armor suppression covers is DATA, not an option:**
+  `suppress.json` (StorageUtilData, beside config/morph.json) holds one
+  `"suppress"` string list whose entries are either an exact morph name or an
+  area keyword (nipples / areolas / vagina / other, matched through
+  `GroupForMorph`, which is the one-liner for a body whose sliders aren't
+  listed). Ships as the 21 nipple + areola sliders of 3BA, UBE and BHUNP,
+  deduped - one file for every body, since a name the active table doesn't
+  contain is simply never looked up. Nothing below the chest: the trigger is
+  a CHEST test, so it says nothing about a vagina slider, which a skimpy
+  armor leaves on show anyway. Keep it in step when a body patch adds a chest
+  slider; UBE's erection morph is `AreolaErection`, NOT a nipple name, so an
+  areola-free list would let it inflate through tops. The MCM keeps a single
+  on/off toggle; widening or narrowing the set is a file edit. Deliberately
+  ONE reader: `ABM_Quest.RebuildMorphTables()` resolves the file into
+  `MorphSuppressed[]` (1 per slot) on every table change (`ResetDefaults`,
+  so Import re-reads it) and every `OnPlayerLoadGame`, and `PushSuppressFlags`
+  hands those flags to the DLL - which never parses JSON - while the writer
+  only indexes an array. That push is a separate native, called LAST, purely
+  so a scripts-only update onto a pre-1.1.0 DLL degrades to its old behaviour
+  instead of leaving it with no morph table at all. A missing file or an empty
+  list falls back to the `nipples` keyword: deleting it must not silently
+  switch suppression off and let nipples clip through tops. To suppress
+  nothing, use the toggle.
 - **Creature test:** a race without the `ActorTypeNPC` keyword is a creature,
   in BOTH pipelines. `ActorBase.GetSex()` returns only -1/0/1
   (None/Male/Female) — the folkloric 2/3 creature codes do not exist; never
@@ -89,11 +118,14 @@ Event-driven replacement for the Papyrus update pipeline; see
 
 ## Bumping the Version
 
-Three places hold the version — keep in sync:
+Four places hold the version — keep in sync:
 
 1. **`dist\meta.ini`** — `version=`. MO2 reads this; canonical user-facing version.
 2. **`ABM_ConfigMenu.psc`** — `GetVersion()` returns `(M)MmmPP` (10000 = 1.00.00). Recompile to `.pex` after editing.
 3. **`dist\ReadMe_ArousedBodyMorphs.txt`** — top-of-file version line.
+4. **`native\xmake.lua`** - `set_version(...)`, the DLL's own version resource.
+   Only matters when the DLL is rebuilt, but it says "keep in step" for a
+   reason: it is what `SKSE.GetPluginVersion` reports.
 
 The readme carries NO changelog: this is a pre-release mod, so per-version
 history is noise. Release notes live on the GitHub release instead.
@@ -118,11 +150,11 @@ native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 
 | Script | Role |
 |--------|------|
-| `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, area-group helpers (`GroupForMorph` / `GroupName`). `OnInit()` runs first-time setup. |
+| `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, area-group helpers (`GroupForMorph` / `GroupName` / `GroupKeyword`) and the resolved under-armor set (`RebuildMorphTables` / `MorphSuppressed` / `UnderArmorActive`). `OnInit()` runs first-time setup. |
 | `ABM_PlayerAlias` | `ReferenceAlias` on the player. Detects NiOverride/SKEE, identifies the SLA flavor, runs `UpdateActor()` to push BodyMorph values, owns the player poll, under-armor suppression and the reveal tween. NIO key is `"ArousedBodyMorphs.esp"`. |
 | `ABM_ConfigMenu` | SkyUI MCM (two pages: General / Morphs). Morphs page groups sliders by area (Nipples / Areolas / Vagina / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
 | `ABM_DebugSpellEffect` | Lesser-power magic effect. Dumps actor base + morph values to the Papyrus log, forces `UpdateActor()`, dumps again. |
-| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled` gate + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`). No form binding — not in the ESP. |
+| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled` gate + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`, `PushSuppressFlags`). No form binding — not in the ESP. |
 
 ### ESP records (all defined by this plugin, ESL range)
 
@@ -148,14 +180,34 @@ SexLab.esm — the mod must load on OStim-only setups; keep it that way.)
 #### SLA flavor detection (multi-fork)
 
 Follows the **"Supporting Both OSL Aroused and SLA NG"** pattern from
-`SexlabArousedNG/README.md`. `ABM_PlayerAlias.OnPlayerLoadGame` calls
-`sla_Framework.GetVersion()` and branches on the date-stamped scheme:
+`SexlabArousedNG/README.md`. `ABM_PlayerAlias.ResolveSlaFlavor` (from
+`OnPlayerLoadGame`) calls `sla_Framework.GetVersion()` and branches on it:
 
 | `GetVersion()` | Fork | Flag set | Read path |
 |---|---|---|---|
 | `>= 20200000` | SexLab Aroused NG / SLO Aroused NG (3.x, packs `MMmmppp`) | `isSLAroused29 = true` | `GetActorArousal` — full recalculation per call |
 | `> 0` and `< 20200000` | OSL Aroused stub (`20140124`), SLAXSE2022 (`20190720`), eXtended LE, SSELoose | `isSLAroused28 = true` ("Legacy / OSL stub") | `GetActorArousal` works on the stub too |
-| `0` | Nothing installed | both flags `false` | abort with notification |
+| `0`, quest present | Fork installed but not initialized yet | unchanged, retry pending | see below |
+| `0`, no `sla_Framework` quest | Nothing installed | both flags `false` | abort with notification |
+
+**`GetVersion() == 0` is not "missing" - never abort on it** (the 1.0.6 bug).
+SLA NG / SLO Aroused NG answer out of `slaMainScr`'s **save-persisted**
+`modVersion`, and that stays 0 until their own init has run once:
+`slaInternalScr.OnInit` arms +5s, `Maintenance()` enters the `initializing`
+state and arms +10s, and only that tick calls `SetVersion`. Our
+`OnPlayerLoadGame` fires in the first second of the load, so on the **first**
+session after installing that fork we read 0 and switched the mod off for the
+whole session, recovering only after another save + reload. Forks that return
+a literal (OSL Aroused `20140124`, SLAXSE2022 `20190720`) never showed it,
+which is why it read as fork-specific. `ResolveSlaFlavor` therefore retries on
+`RegisterForSingleUpdate` (`SLA_RETRY_INTERVAL` 5s x `SLA_RETRY_MAX` 12, ~60s
+of cover) and, if the version never arrives, falls back to the legacy flag
+rather than aborting - the quest object resolved, so `GetActorArousal` is
+there. The retry borrows the alias's `OnUpdate` slot, which the poll has not
+claimed yet; `RestartPolling` re-arms the retry instead of the poll while one
+is pending. The DLL picks its own backend by DLL export, so it never misread
+the version - but the abort skipped `PushConfigToNative()` too, so native
+mode went unconfigured for that session as well.
 
 Why `GetActorArousal` and not the `slaArousal` faction rank: the faction rank
 is a *cache* SLA only refreshes on its scan tick (default 120s);
@@ -222,7 +274,7 @@ the effect to be visible in-game (user-side concern, not a code concern).
   hold the identical key set; SkyUI only substitutes on a WHOLE-string match, so
   a label built by concatenation (title + version, the morph count) cannot be
   translated and is deliberately left literal.
-- Runtime JSON (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`) lives in `Data\SKSE\Plugins\StorageUtilData\` — the shipped copies under `dist\SKSE\` are the install defaults. All values stored as strings; readers cast to `int`/`float`, writers must do `(value as int) as string` explicitly.
+- Runtime JSON (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`, `ArousedBodyMorphs/suppress.json`) lives in `Data\SKSE\Plugins\StorageUtilData\` — the shipped copies under `dist\SKSE\` are the install defaults. All values stored as strings; readers cast to `int`/`float`, writers must do `(value as int) as string` explicitly.
 - Preset/morph JSON keys use the EXACT morph names from `ABM_Quest.FullMorphSet()` (mixed case) — no normalization layer exists; keep them in sync.
 - JsonUtil API quick-reference: `StringListClear/Count/Get/Add(file, listKey, ...)`, `GetStringValue(file, key, missing)` (third arg positional), `SetStringValue(file, key, value)`.
 - Papyrus does not support named arguments in the stock CK compiler. Always use positional args.

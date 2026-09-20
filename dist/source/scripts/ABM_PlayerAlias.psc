@@ -12,6 +12,12 @@ String Property NIO_KEY = "ArousedBodyMorphs.esp" AutoReadOnly hidden
 
 slaFrameworkScr Property sla_Framework Auto
 
+; SLA flavor-detection retry, for a fork that answers GetVersion() out of
+; save-persisted state and so isn't ready at load. See ResolveSlaFlavor.
+Float Property SLA_RETRY_INTERVAL = 5.0 AutoReadOnly
+Int Property SLA_RETRY_MAX = 12 AutoReadOnly
+Int slaRetriesLeft = 0
+
 ; Top-nudity state, resolved per load by ResolveNudityDetection(). See IsTopCovered.
 Bool AND_Resolved = false
 Faction AND_Nude
@@ -90,6 +96,10 @@ Function PushConfigToNative()
 	EndIf
 	ABM_Native.PushConfig(MainQuest.ModEnabled, MainQuest.IgnoreMales, MainQuest.IgnoreDead, MainQuest.IgnoreMaleBeast, MainQuest.IgnoreFemaleBeast, MainQuest.SuppressUnderArmor, MainQuest.UnderArmorScale, MainQuest.PollInterval, MainQuest.ScanCellRadius, MainQuest.DebugMode)
 	ABM_Native.PushMorphTable(MainQuest.MorphNames, MainQuest.MaxValue)
+	; LAST, and deliberately so: suppress.json is read in one place (Papyrus) and
+	; the flags are the only thing here a pre-1.1.0 DLL can't take, so everything
+	; above has already landed if this call finds no native to bind to.
+	ABM_Native.PushSuppressFlags(MainQuest.GetMorphSuppressed())
 EndFunction
 
 slaFrameworkScr Function GetFramework()
@@ -119,6 +129,11 @@ Event OnPlayerLoadGame()
 	PlayerRef = None
 	GetPlayerRef()
 
+	; Re-read suppress.json for this session. Before the abort paths below so an
+	; edited file lands even when a requirement check later fails, and cheap: one
+	; JSON read plus a pass over the table, once per load.
+	MainQuest.RebuildMorphTables()
+
 	if MainQuest.DebugMode
 		debug.Notification("Aroused BodyMorphs: checking for requirements")
 		debug.Trace("ABM: checking for requirements")
@@ -135,33 +150,74 @@ Event OnPlayerLoadGame()
 		MainQuest.isNioOk = true
 	EndIf
 
-	; Multi-fork detection via GetVersion(), which every fork implements.
-	; Date-stamped: OSL stub 20140124, SLAXSE2022 20190720, real NG >= 20200000
-	; (SLA NG's own gate). We only use the read path, portable across all of them.
+	slaRetriesLeft = SLA_RETRY_MAX
+	ResolveSlaFlavor()
+EndEvent
+
+Function ResolveSlaFlavor()
+	{Identify the SLA fork and, on success, finish the load-time setup. Called
+	 from OnPlayerLoadGame, and from OnUpdate while a retry is pending.
+
+	 Detection is GetVersion(), which every fork implements. The legacy forks
+	 answer with a date stamp (OSL Aroused stub 20140124, SLAXSE2022 20190720);
+	 SLA NG / SLO Aroused NG pack (M)Mmmppppp instead and start at 30100000, so
+	 20200000 separates the two schemes. We only use the read path, portable
+	 across all of them.
+
+	 A 0 from a framework that IS present does not mean "missing". SLA NG / SLO
+	 Aroused NG answer out of slaMainScr's SAVE-PERSISTED modVersion, which stays
+	 0 until their own init has run once: slaInternalScr.OnInit arms +5s,
+	 Maintenance enters the "initializing" state and arms +10s, and only that
+	 tick calls SetVersion. OnPlayerLoadGame fires in the first second of the
+	 load, so on the FIRST session after installing that fork we read 0 -- and
+	 aborting there switched the mod off for the WHOLE session, until another
+	 save + reload. Forks that return a literal (OSL Aroused, SLAXSE2022) never
+	 showed it, which is why this read as fork-specific. So a present framework
+	 reporting 0 is retried, not aborted.}
 	slaFrameworkScr framework = GetFramework()
 	if !framework
 		; Property and fallback both None -- SexLabAroused.esm isn't loaded.
+		slaRetriesLeft = 0
 		MainQuest.isSLAroused28 = false
 		MainQuest.isSLAroused29 = false
 		debug.Notification("Aroused BodyMorphs: SLA framework not found (Auto property unwired AND Quest.GetQuest fallback failed), aborting")
 		debug.Trace("ABM: SLA framework not found (Auto property unwired AND Quest.GetQuest fallback failed), aborting")
 		return
 	endif
+
 	int slaVersion = framework.GetVersion()
+
+	if slaVersion == 0 && slaRetriesLeft > 0
+		slaRetriesLeft -= 1
+		if slaRetriesLeft > 0
+			; There, but still initializing -- come back for it.
+			debug.Trace("ABM: SLA framework present but GetVersion() still 0 (fork not initialized yet), retrying; " + slaRetriesLeft + " attempts left")
+			RegisterForSingleUpdate(SLA_RETRY_INTERVAL)
+			return
+		endif
+		; Attempts exhausted: fall THROUGH to the degraded path below, in this
+		; same call. Arming one more tick instead would strand the mod for the
+		; session -- OnUpdate only routes here while slaRetriesLeft > 0, and it
+		; is 0 now, so that tick would hit the poll branch, find IsActive()
+		; false (neither SLA flag set yet) and let the loop die with the fork
+		; never identified.
+		debug.Trace("ABM: SLA framework never reported a version after " + SLA_RETRY_MAX + " attempts; taking the legacy read path")
+	endif
+
+	slaRetriesLeft = 0
 
 	if slaVersion >= 20200000
 		MainQuest.isSLAroused28 = false
 		MainQuest.isSLAroused29 = true
-	elseif slaVersion > 0
-		; Any pre-NG fork; GetActorArousal still works.
+	else
+		; Any pre-NG fork; GetActorArousal still works. Also where a framework that
+		; never reported a version lands: the quest object resolved, so the read
+		; path is there -- run degraded rather than switching the mod off.
 		MainQuest.isSLAroused28 = true
 		MainQuest.isSLAroused29 = false
-	else
-		MainQuest.isSLAroused28 = false
-		MainQuest.isSLAroused29 = false
-		debug.Notification("Aroused BodyMorphs: SexLab Aroused framework not detected (GetVersion returned " + slaVersion + "), aborting")
-		debug.Trace("ABM: SexLab Aroused framework not detected (GetVersion returned " + slaVersion + "), aborting")
-		return
+		if slaVersion == 0
+			debug.Trace("ABM: SLA framework never reported a version; assuming a legacy fork so the read path stays live")
+		endif
 	endif
 
 	;success
@@ -186,10 +242,16 @@ Event OnPlayerLoadGame()
 		debug.Notification("Aroused BodyMorphs: requirements check successful")
 		debug.Trace("ABM: requirements check successful")
 	EndIf
-EndEvent
+EndFunction
 
 Event OnUpdate()
-	{Player-only refresh between SLA heartbeats. Not used in native mode.}
+	{Player-only refresh between SLA heartbeats. Not used in native mode. Also
+	 carries the SLA flavor-detection retry, which owns the update slot until the
+	 fork identifies -- the poll is not armed before that.}
+	If slaRetriesLeft > 0
+		ResolveSlaFlavor()
+		return
+	EndIf
 	If !IsActive()
 		; Off, or requirements lost mid-save -- stop. Re-armed by RestartPolling,
 		; SetModEnabled, or the next load.
@@ -214,6 +276,12 @@ Function RestartPolling()
 	 the push.}
 	UnregisterForUpdate()
 	PushConfigToNative()
+	If slaRetriesLeft > 0
+		; Flavor detection still owns the update slot -- re-arm it, not the poll.
+		; It arms the poll itself once the fork identifies.
+		RegisterForSingleUpdate(SLA_RETRY_INTERVAL)
+		return
+	EndIf
 	If NativeActive()
 		return
 	EndIf
@@ -478,7 +546,7 @@ Function RefreshOnArmorChange(Form akBaseObject, Bool wasRemoved)
 		; The DLL's equip sink handles this.
 		return
 	EndIf
-	If !MainQuest.SuppressUnderArmor
+	If !MainQuest.UnderArmorActive()
 		return
 	EndIf
 	If !IsActive()
@@ -637,10 +705,11 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 		Arousal = 0
 	EndIf
 
-	; Under-armor suppression: scale everything by UnderArmorScale while covered
-	; (0.0 = flat, 1.0 = full) so fitted nipples don't poke through tops.
+	; Under-armor suppression: scale the selected area groups by UnderArmorScale
+	; while covered (0.0 = flat, 1.0 = full) so fitted nipples don't poke through
+	; tops. SetActorMorphs is what applies it per group.
 	Float armorScale = 1.0
-	If MainQuest.SuppressUnderArmor && IsTopCovered(who)
+	If MainQuest.UnderArmorActive() && IsTopCovered(who)
 		armorScale = MainQuest.UnderArmorScale
 		If doDebug
 			debug.Notification("Aroused BodyMorphs: "+whoBase.GetName()+" chest covered, scaling morphs x"+armorScale)
@@ -662,16 +731,24 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 EndFunction
 
 Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
-	{Write every morph = maxValue * arousal/100 * scale, then push the model
-	 update. Shared by UpdateActor (a snap) and TweenPlayerReveal (one ease step).
+	{Write every morph = maxValue * arousal/100, times scale for the morphs whose
+	 area group the under-armor setting covers, then push the model update.
+	 Shared by UpdateActor (a snap) and TweenPlayerReveal (one ease step).
+
+	 So there are TWO factors in play, not one: covered (scaled) for the selected
+	 groups and bare for the rest -- the chest test that produces `scale` says
+	 nothing about a vagina slider, which is why the groups are selectable at all.
 
 	 Unchanged-value skip: UpdateModelWeight is by far the most expensive call
-	 here, and arousal rarely moves between ticks. Every slot shares one factor,
-	 so a single slot settles whether anything would change -- one GetBodyMorph
-	 replaces 23 writes plus the rebuild. The probe reads back what WE wrote
-	 (our key), making NiOverride the source of truth: nothing to invalidate on a
-	 slider change, a save load, or an external clear, because the target moves
-	 with the settings. DO NOT replace it with a remembered value.
+	 here, and arousal rarely moves between ticks. Since every slot takes one of
+	 those two factors, ONE PROBE PER FACTOR settles whether anything would
+	 change -- one or two GetBodyMorph calls replace 23 writes plus the rebuild.
+	 A single probe is no longer enough: with a mixed mask it would miss every
+	 change confined to the other factor (bare <-> covered while the probe sits
+	 in an unselected group). The probes read back what WE wrote (our key),
+	 making NiOverride the source of truth: nothing to invalidate on a slider
+	 change, a save load, or an external clear, because the target moves with the
+	 settings. DO NOT replace it with a remembered value.
 
 	 The ModEnabled check lives here, the single point where morphs are written:
 	 every external call unlocks the script, so the MCM can clear morphs mid-tween
@@ -683,30 +760,63 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	Float[]  maxValues  = MainQuest.MaxValue
 
 	; Integer division trap: arousal / 100 would truncate to 0 -- cast first.
-	Float factor = (arousal as Float) / 100.0 * scale
+	Float bare = (arousal as Float) / 100.0
+	Float covered = bare * scale
 
-	; Probe slot = first non-zero max; a zero-max slot reads 0 for every factor
-	; and could never detect a change.
-	Int p = 0
-	While p < 128 && morphNames[p] != "" && maxValues[p] == 0.0
-		p += 1
+	; A scale of 1.0 (uncovered, or suppression off) makes both factors equal, so
+	; the per-morph flags can't change any value -- skip reading them entirely,
+	; which is the common case for a naked actor.
+	Bool mixed = scale != 1.0
+	Int[] suppressed
+	If mixed
+		; Resolved from suppress.json once per table change, not per write.
+		suppressed = MainQuest.GetMorphSuppressed()
+	EndIf
+
+	; Probe slots: the first non-zero max on each factor. A zero-max slot reads 0
+	; for every factor and could never detect a change.
+	Int probeBare = -1
+	Int probeCovered = -1
+	int j = 0
+	While j < 128 && morphNames[j] != ""
+		If maxValues[j] != 0.0
+			If mixed && suppressed[j] != 0
+				If probeCovered < 0
+					probeCovered = j
+				EndIf
+			ElseIf probeBare < 0
+				probeBare = j
+			EndIf
+		EndIf
+		j += 1
 	EndWhile
-	If p >= 128 || morphNames[p] == ""
+	If probeBare < 0 && probeCovered < 0
 		; Empty table, or every max is 0 -- nothing can ever be written.
 		return
 	EndIf
 	; 1e-6: float32 noise here is ~1e-8, the smallest dialable step ~1e-4.
-	If Math.Abs(NiOverride.GetBodyMorph(who, morphNames[p], NIO_KEY) - maxValues[p] * factor) < 0.000001
+	Bool changed = false
+	If probeBare >= 0 && Math.Abs(NiOverride.GetBodyMorph(who, morphNames[probeBare], NIO_KEY) - maxValues[probeBare] * bare) >= 0.000001
+		changed = true
+	EndIf
+	If !changed && probeCovered >= 0 && Math.Abs(NiOverride.GetBodyMorph(who, morphNames[probeCovered], NIO_KEY) - maxValues[probeCovered] * covered) >= 0.000001
+		changed = true
+	EndIf
+	If !changed
 		If doDebug
 			; Say so explicitly: otherwise a debug session sees no "setting ..."
 			; lines and can't tell "already correct" from "never ran".
-			debug.Trace("ABM: morphs already at target (factor "+factor+"), skipping write")
+			debug.Trace("ABM: morphs already at target (factor "+bare+", covered "+covered+"), skipping write")
 		EndIf
 		return
 	EndIf
 
-	int j = 0
+	j = 0
 	while j < 128 && morphNames[j] != ""
+		float factor = bare
+		If mixed && suppressed[j] != 0
+			factor = covered
+		EndIf
 		float Value = maxValues[j] * factor
 		NiOverride.SetBodyMorph(who, morphNames[j], NIO_KEY, Value)
 		If doDebug
@@ -734,7 +844,7 @@ Function TweenPlayerReveal()
 
 	; Target scale after the armor change (1.0 = bare; still-covered -> no reveal).
 	Float target = 1.0
-	If MainQuest.SuppressUnderArmor && IsTopCovered(player)
+	If MainQuest.UnderArmorActive() && IsTopCovered(player)
 		target = MainQuest.UnderArmorScale
 	EndIf
 	Float from = PlayerArmorScale

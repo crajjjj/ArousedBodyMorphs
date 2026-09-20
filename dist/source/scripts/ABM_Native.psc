@@ -4,7 +4,7 @@ ScriptName ABM_Native Hidden
  With the DLL installed and a backend detected, it takes over the whole update
  pipeline -- per-actor refreshes, the player poll, armor changes and the SKEE
  writes -- off the Papyrus VM. Papyrus keeps the MCM and settings, mirroring
- them here via PushConfig/PushMorphTable.
+ them here via PushConfig / PushMorphTable / PushSuppressFlags.
 
  Without the DLL every native here is unbound: ALWAYS gate on IsInstalled(),
  which needs only SKSE. ABM_PlayerAlias.NativeActive() is the combined gate.}
@@ -37,3 +37,15 @@ Function PushConfig(Bool modEnabled, Bool ignoreMales, Bool ignoreDead, Bool ign
 
 Function PushMorphTable(String[] names, Float[] maxValues) Global Native
 {Mirror the morph table (128-slot arrays, trailing empties ignored).}
+
+Function PushSuppressFlags(Int[] suppressed) Global Native
+{Mark which slots of the pushed table the under-armor scale applies to: 1 =
+ suppressed, parallel to PushMorphTable's arrays. ABM_Quest resolves
+ suppress.json, so the DLL never reads it. Int, not Bool, so the Papyrus array
+ maps to a plain std::vector on the native side.
+
+ Deliberately a SEPARATE native rather than a third PushMorphTable argument:
+ this is the only call a pre-1.1.0 DLL doesn't export, and PushConfigToNative
+ makes it last, so a scripts-only update degrades to that DLL's old behaviour
+ (scale everything while covered) instead of leaving it with no morph table at
+ all -- i.e. a silently dead mod.}

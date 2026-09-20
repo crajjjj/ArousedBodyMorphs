@@ -36,9 +36,29 @@ bool Property SuppressUnderArmor = true Auto Hidden
 float Property UnderArmorScale = 0.0 Auto Hidden
 float Property DefaultUnderArmorScale = 0.0 AutoReadOnly Hidden
 
+; WHICH morphs UnderArmorScale reaches is data, not an MCM option: suppress.json
+; holds one list whose entries are either an exact morph name or an area keyword
+; (nipples / areolas / vagina / other, matched via GroupForMorph, which is the
+; one-liner for a body whose sliders aren't listed). SHIPS as the nipple +
+; areola slider names of 3BA, UBE and BHUNP -- nothing below the chest, since
+; "covered" is a CHEST test and says nothing about a vagina slider, which a
+; skimpy armor leaves on show anyway. A body outside that list therefore gets no
+; suppression until its names (or a keyword) are added: that is the cost of an
+; explicit list, and the readme says so. Edit the file to widen or narrow it;
+; the MCM toggle stays a plain on/off.
+String Property SuppressFile = "ArousedBodyMorphs/suppress.json" AutoReadOnly Hidden
+
 string[] Property MorphNames Auto Hidden
 float[] Property MaxValue Auto Hidden
 float[] Property MaxDefault Auto Hidden
+
+; 1 per MorphNames slot the under-armor scale applies to, 0 otherwise -- the
+; resolved suppress.json, cached so the writer only indexes an array and the
+; file is never read per morph. Int rather than Bool because it is pushed to the
+; DLL verbatim. Rebuilt by RebuildMorphTables (table change + every game load,
+; which is what makes a hand-edited file take effect).
+int[] Property MorphSuppressed Auto Hidden
+bool Property AnyMorphSuppressed = false Auto Hidden
 
 ; Install defaults = the "Natural" tier (matches IntensityPresets\Natural.json).
 ; AutoReadOnly = compiled constants, not cosave-persisted, so an updated .pex
@@ -107,14 +127,80 @@ Function ResetAllState()
 EndFunction
 
 Function ResetDefaults()
-	{Rebuild MaxDefault to match the current MorphNames. Derived from
-	 DefaultForMorph, so it stays right for imported tables too (unknown -> 0).}
+	{Rebuild everything derived from MorphNames -- MaxDefault (from
+	 DefaultForMorph, so it stays right for imported tables too: unknown -> 0)
+	 and the suppression flags. Both live here rather than in separate calls so
+	 no path can refresh one and leave the other stale.}
 	MaxDefault = new float[128]
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
 		MaxDefault[i] = DefaultForMorph(MorphNames[i])
 		i += 1
 	EndWhile
+	RebuildMorphTables()
+EndFunction
+
+Function RebuildMorphTables()
+	{Resolve suppress.json against the current MorphNames into MorphSuppressed.
+
+	 Each rule is either an area keyword (matched through GroupForMorph, so one
+	 file covers every body's slider names) or an exact morph name. A missing
+	 file or an empty list falls back to nipples alone: deleting the file must
+	 not silently switch suppression off and leave nipples clipping through
+	 tops. To suppress nothing, use the MCM toggle -- that is what it is for.
+
+	 Called from ResetDefaults (every path that rewrites the table) and from
+	 OnPlayerLoadGame, which is what makes a hand-edited file take effect.}
+	MorphSuppressed = new int[128]
+	AnyMorphSuppressed = false
+	If !MorphNames
+		; Corrupt / not-yet-built table (the state "Reset all state" exists to
+		; recover from). Indexing it would throw and take the rest of
+		; OnPlayerLoadGame -- requirements, SLA flavor, the poll -- down with it.
+		return
+	EndIf
+
+	String[] rules = new String[128]
+	Int ruleCount = 0
+	If JsonUtil.Load(SuppressFile)
+		Int listed = JsonUtil.StringListCount(SuppressFile, "suppress")
+		While ruleCount < listed && ruleCount < 128
+			rules[ruleCount] = JsonUtil.StringListGet(SuppressFile, "suppress", ruleCount)
+			ruleCount += 1
+		EndWhile
+		JsonUtil.Unload(SuppressFile, false, false)
+	EndIf
+	If ruleCount == 0
+		rules[0] = "nipples"
+		ruleCount = 1
+	EndIf
+
+	Int i = 0
+	While i < 128 && MorphNames[i] != ""
+		String area = GroupKeyword(GroupForMorph(MorphNames[i]))
+		Int r = 0
+		While r < ruleCount
+			; Papyrus string compare is case-insensitive, so a hand-typed
+			; "Nipples" or "nipplesize" matches. No break: jump r past the end.
+			If rules[r] == area || rules[r] == MorphNames[i]
+				MorphSuppressed[i] = 1
+				AnyMorphSuppressed = true
+				r = ruleCount
+			Else
+				r += 1
+			EndIf
+		EndWhile
+		i += 1
+	EndWhile
+EndFunction
+
+Int[] Function GetMorphSuppressed()
+	{The suppression flags, built on demand. The fallback is what fills them in
+	 on a save made before they existed, where the property loads as None.}
+	If !MorphSuppressed
+		RebuildMorphTables()
+	EndIf
+	Return MorphSuppressed
 EndFunction
 
 String[] Function FullMorphSet()
@@ -246,6 +332,33 @@ Int Function GroupForMorph(String morphName)
 		Return 2
 	EndIf
 	Return 3
+EndFunction
+
+String Function GroupKeyword(Int groupId)
+	{The suppress.json spelling of an area group. Deliberately NOT GroupName:
+	 that one returns a "$ABM_*" translation key for the MCM headers, and a
+	 hand-edited file must not be language-dependent.}
+	If groupId == 0
+		Return "nipples"
+	ElseIf groupId == 1
+		Return "areolas"
+	ElseIf groupId == 2
+		Return "vagina"
+	EndIf
+	Return "other"
+EndFunction
+
+Bool Function UnderArmorActive()
+	{True when suppression is on AND the resolved list actually covers a morph
+	 in the current table. With nothing to scale, the armor handlers and the
+	 writer skip the covered test entirely.}
+	If !SuppressUnderArmor
+		Return false
+	EndIf
+	If !MorphSuppressed
+		RebuildMorphTables()
+	EndIf
+	Return AnyMorphSuppressed
 EndFunction
 
 String Function GroupName(Int groupId)

@@ -25,8 +25,8 @@ namespace ABM::MorphApplier
 	// Update one actor from a fresh arousal read. Returns the arousal in
 	// effect, -1 backend/SKEE unavailable, -2 skipped (disabled, filters, no
 	// 3D). The write is skipped when SKEE already holds these values (one
-	// GetMorph probe), so a steady-state tick costs a read, not a rebuild --
-	// and no cached state exists to go stale. MAIN THREAD ONLY.
+	// GetMorph probe per factor in play), so a steady-state tick costs a read,
+	// not a rebuild -- and no cached state exists to go stale. MAIN THREAD ONLY.
 	int UpdateActor(RE::Actor* who);
 
 	// Same, callable from any thread: evaluates inline for the return code,

@@ -129,8 +129,10 @@ namespace ABM::MorphApplier
 			}
 			arousal = std::clamp(arousal, 0, 100);
 
+			// With no morph flagged the feature does nothing, so the covered
+			// test (an inventory walk) isn't worth running.
 			outScale = 1.0f;
-			if (cfg->suppressUnderArmor && IsTopCovered(who)) {
+			if (cfg->suppressUnderArmor && cfg->anySuppressed && IsTopCovered(who)) {
 				outScale = cfg->underArmorScale;
 			}
 			return arousal;
@@ -149,38 +151,61 @@ namespace ABM::MorphApplier
 				return;
 			}
 
-			const float factor = static_cast<float>(arousal) / 100.0f * armorScale;
+			// Two factors, not one: the scale reaches only the morphs flagged by
+			// suppress.json (the covered test is a CHEST test, so e.g. a vagina
+			// slider has no business being flattened by it). A scale of 1.0
+			// collapses them, which is the uncovered case.
+			const float bare = static_cast<float>(arousal) / 100.0f;
+			const float covered = bare * armorScale;
+			const bool mixed = armorScale != 1.0f;
+			const auto suppressed = [&](const MorphEntry& morph) {
+				return mixed && morph.suppressed;
+			};
 
-			// Unchanged-value skip: every slot shares one factor, so a single
-			// slot settles whether anything would change. Reading back what WE
-			// wrote (our key) makes SKEE the source of truth -- no parallel
-			// cache to invalidate on a push, a load, or an external clear.
-			// Skipping avoids the ApplyBodyMorphs rebuild, the real cost.
-			// Probe slot = first non-zero max; a zero-max slot reads 0 for
-			// every factor and could never detect a change.
-			const MorphEntry* probe = nullptr;
+			// Unchanged-value skip: every slot takes one of those two factors,
+			// so ONE PROBE PER FACTOR settles whether anything would change --
+			// a single probe would miss changes confined to the other factor.
+			// Reading back what WE wrote (our key) makes SKEE the source of
+			// truth: no parallel cache to invalidate on a push, a load, or an
+			// external clear. Skipping avoids the ApplyBodyMorphs rebuild, the
+			// real cost. Probes must have a non-zero max; a zero-max slot reads
+			// 0 for every factor and could never detect a change.
+			const MorphEntry* probeBare = nullptr;
+			const MorphEntry* probeCovered = nullptr;
 			for (const auto& morph : cfg->morphs) {
-				if (morph.maxValue != 0.0f) {
-					probe = &morph;
-					break;
+				if (morph.maxValue == 0.0f) {
+					continue;
+				}
+				if (suppressed(morph)) {
+					if (!probeCovered) {
+						probeCovered = &morph;
+					}
+				} else if (!probeBare) {
+					probeBare = &morph;
 				}
 			}
-			if (!probe) {
+			if (!probeBare && !probeCovered) {
 				return;  // every max is 0 -- this table can never write anything
 			}
-			const float current = g_bodyMorph->GetMorph(who, probe->name.c_str(), NIO_KEY);
-			if (std::fabs(current - probe->maxValue * factor) < 1e-6f) {
+			const auto atTarget = [&](const MorphEntry* probe, float factor) {
+				if (!probe) {
+					return true;
+				}
+				const float current = g_bodyMorph->GetMorph(who, probe->name.c_str(), NIO_KEY);
+				return std::fabs(current - probe->maxValue * factor) < 1e-6f;
+			};
+			if (atTarget(probeBare, bare) && atTarget(probeCovered, covered)) {
 				if (cfg->debugMode) {
 					// Say so explicitly, so a debug session can tell "already
 					// correct" from "never ran".
-					logger::info("ApplyMorphs: {} already at target (factor {})",
-						who->GetDisplayFullName(), factor);
+					logger::info("ApplyMorphs: {} already at target (factor {}, covered {})",
+						who->GetDisplayFullName(), bare, covered);
 				}
 				return;
 			}
 
 			for (const auto& morph : cfg->morphs) {
-				const float value = morph.maxValue * factor;
+				const float value = morph.maxValue * (suppressed(morph) ? covered : bare);
 				g_bodyMorph->SetMorph(who, morph.name.c_str(), NIO_KEY, value);
 			}
 			g_bodyMorph->ApplyBodyMorphs(who);

@@ -11,6 +11,10 @@ namespace ABM
 	{
 		std::string name;
 		float       maxValue = 0.0f;
+		// True when the under-armor scale applies to this morph. Resolved from
+		// suppress.json by ABM_Quest and pushed with the table, so the file has
+		// exactly one reader and the two pipelines cannot disagree.
+		bool suppressed = false;
 	};
 
 	struct Config
@@ -21,6 +25,10 @@ namespace ABM
 		bool  ignoreMaleBeast    = true;
 		bool  ignoreFemaleBeast  = true;
 		bool  suppressUnderArmor = true;
+		// True when at least one morph carries the suppressed flag -- nothing
+		// to scale means the covered test isn't worth running. Derived in
+		// PushSuppressFlags, not pushed.
+		bool  anySuppressed      = false;
 		float underArmorScale    = 0.0f;
 		float pollInterval       = 5.0f;   // seconds; 0 disables the SLA NG player poll
 		float scanRadius         = 1000.0f;
@@ -45,16 +53,34 @@ namespace ABM
 			std::lock_guard lock(Mutex());
 			auto next = std::make_shared<Config>(options);
 			next->morphs = Current()->morphs;
+			// Derived from the table, so it travels with it -- the caller's
+			// options block never carries a meaningful value.
+			next->anySuppressed = Current()->anySuppressed;
 			next->pushed = true;
 			Current() = std::move(next);
 		}
 
-		// Replace the morph table, keeping the current options.
+		// Replace the morph table, keeping the current options. Every entry
+		// starts unsuppressed; PushSuppressFlags follows immediately.
 		static void PushMorphTable(std::vector<MorphEntry> morphs)
 		{
 			std::lock_guard lock(Mutex());
 			auto next = std::make_shared<Config>(*Current());
 			next->morphs = std::move(morphs);
+			next->anySuppressed = false;
+			Current() = std::move(next);
+		}
+
+		// Apply one flag per slot of the current table.
+		static void PushSuppressFlags(const std::vector<std::int32_t>& flags)
+		{
+			std::lock_guard lock(Mutex());
+			auto next = std::make_shared<Config>(*Current());
+			for (size_t i = 0; i < next->morphs.size(); ++i) {
+				next->morphs[i].suppressed = i < flags.size() && flags[i] != 0;
+			}
+			next->anySuppressed = std::any_of(next->morphs.begin(), next->morphs.end(),
+				[](const MorphEntry& morph) { return morph.suppressed; });
 			Current() = std::move(next);
 		}
 

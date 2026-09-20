@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.0.6
+Aroused BodyMorphs 1.1.0
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -48,14 +48,22 @@ Features
   an auxiliary slot instead of the body slot are caught too. With Advanced
   Nudity Detection installed a top still reads as bare while AND reports Nude,
   Topless or Showing Breasts -- that covers skimpy and open-front tops, and
-  also corsets and piercings that only inherited the keyword
+  also corsets and piercings that only inherited the keyword.
+  Which sliders it scales is listed in suppress.json: the nipple and areola
+  sliders of all three supported bodies, by name, and nothing else -- since
+  "covered" is a chest test it says nothing about the rest, and a skimpy
+  armor can leave those on show. Add or remove names to taste; an entry can
+  also be a whole area (nipples / areolas / vagina / other), which is the
+  one-liner for a body whose sliders aren't listed. Read on every game load
+  and on Import Settings
 - Actor filters: ignore males / dead / male beasts / female beasts;
   NPC scan radius (0 = player only)
 - Translated MCM in 11 languages: English, Chinese, Czech, French, German,
   Italian, Japanese, Polish, Russian, Spanish, Ukrainian. The game's language
   picks the file automatically.
 - Import/Export of all settings + the morph table via JSON
-  (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json)
+  (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json;
+  suppress.json lives there too and is edited by hand, not by the MCM)
 - Debug mode with a lesser power that dumps an actor's morph state to the
   Papyrus log
 - Optional native SKSE layer (ArousedBodyMorphs.dll): with SexLab Aroused NG

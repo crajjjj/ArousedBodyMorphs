@@ -6,7 +6,8 @@
 #include "Settings.h"
 
 // Bindings for ABM_Native.psc. Papyrus owns all persisted settings and mirrors
-// them here via PushConfig/PushMorphTable on load and on any MCM change.
+// them here via PushConfig / PushMorphTable / PushSuppressFlags on load and
+// on any MCM change.
 
 namespace ABM::Papyrus
 {
@@ -77,6 +78,16 @@ namespace ABM::Papyrus
 			logger::info("Morph table pushed from Papyrus ({} morphs)", morphs.size());
 			Settings::PushMorphTable(std::move(morphs));
 		}
+
+		// Always follows PushMorphTable, and carries one flag per slot of it.
+		// Entries past the table are ignored and slots past the flags stay
+		// unsuppressed, so a length mismatch leaves a morph at full arousal
+		// rather than silently flattening it.
+		void PushSuppressFlags(RE::StaticFunctionTag*, std::vector<int32_t> suppressed)
+		{
+			Settings::PushSuppressFlags(suppressed);
+			logger::info("Suppression flags pushed from Papyrus ({} entries)", suppressed.size());
+		}
 	}
 
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* vm)
@@ -87,6 +98,7 @@ namespace ABM::Papyrus
 		vm->RegisterFunction("ClearActorMorphs", PapyrusClass, ClearActorMorphs);
 		vm->RegisterFunction("PushConfig", PapyrusClass, PushConfig);
 		vm->RegisterFunction("PushMorphTable", PapyrusClass, PushMorphTable);
+		vm->RegisterFunction("PushSuppressFlags", PapyrusClass, PushSuppressFlags);
 		return true;
 	}
 }
