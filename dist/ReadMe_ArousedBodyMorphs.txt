@@ -25,8 +25,9 @@ Requirements
 - SKSE64, SkyUI
 - RaceMenu (SKEE / NiOverride) -- the BodyMorph API
 - PapyrusUtil
-- SexLab Aroused -- any flavor: SexLab Aroused NG / SLO Aroused NG (recommended),
-  OSL Aroused (its SLA stub), SLAX / SSELoose / eXtended (legacy)
+- SexLab Aroused -- any flavor: SexLab Aroused NG, published on Nexus as
+  SLO Aroused NG (recommended), OSL Aroused (its SLA stub),
+  SLAX / SSELoose / eXtended (legacy)
 - A 3BA-compatible body built in BodySlide with morphs (or import your own
   morph list for other bodies)
 - Optional: Advanced Nudity Detection -- improves the "under armor" detection

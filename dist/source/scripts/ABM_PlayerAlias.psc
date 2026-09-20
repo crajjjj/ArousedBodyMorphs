@@ -160,16 +160,16 @@ Function ResolveSlaFlavor()
 
 	 Detection is GetVersion(), which every fork implements. The legacy forks
 	 answer with a date stamp (OSL Aroused stub 20140124, SLAXSE2022 20190720);
-	 SLA NG / SLO Aroused NG pack (M)Mmmppppp instead and start at 30100000, so
-	 20200000 separates the two schemes. We only use the read path, portable
-	 across all of them.
+	 SLA NG -- one mod, published on Nexus as SLO Aroused NG -- packs
+	 (M)Mmmppppp instead and starts at 30100000, so 20200000 separates the two
+	 schemes. We only use the read path, portable across all of them.
 
-	 A 0 from a framework that IS present does not mean "missing". SLA NG / SLO
-	 Aroused NG answer out of slaMainScr's SAVE-PERSISTED modVersion, which stays
-	 0 until their own init has run once: slaInternalScr.OnInit arms +5s,
-	 Maintenance enters the "initializing" state and arms +10s, and only that
-	 tick calls SetVersion. OnPlayerLoadGame fires in the first second of the
-	 load, so on the FIRST session after installing that fork we read 0 -- and
+	 A 0 from a framework that IS present does not mean "missing". SLA NG answers
+	 out of slaMainScr's SAVE-PERSISTED modVersion, which stays 0 until its own
+	 init has run once: slaInternalScr.OnInit arms +5s, Maintenance enters the
+	 "initializing" state and arms +10s, and only that tick calls SetVersion.
+	 OnPlayerLoadGame fires in the first second of the load, so on the FIRST
+	 session after installing that fork we read 0 -- and
 	 aborting there switched the mod off for the WHOLE session, until another
 	 save + reload. Forks that return a literal (OSL Aroused, SLAXSE2022) never
 	 showed it, which is why this read as fork-specific. So a present framework

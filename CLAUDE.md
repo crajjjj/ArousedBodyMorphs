@@ -185,14 +185,14 @@ Follows the **"Supporting Both OSL Aroused and SLA NG"** pattern from
 
 | `GetVersion()` | Fork | Flag set | Read path |
 |---|---|---|---|
-| `>= 20200000` | SexLab Aroused NG / SLO Aroused NG (3.x, packs `MMmmppp`) | `isSLAroused29 = true` | `GetActorArousal` — full recalculation per call |
+| `>= 20200000` | SexLab Aroused NG, published as SLO Aroused NG -- one mod, not two (3.x, packs `MMmmppp`) | `isSLAroused29 = true` | `GetActorArousal` — full recalculation per call |
 | `> 0` and `< 20200000` | OSL Aroused stub (`20140124`), SLAXSE2022 (`20190720`), eXtended LE, SSELoose | `isSLAroused28 = true` ("Legacy / OSL stub") | `GetActorArousal` works on the stub too |
 | `0`, quest present | Fork installed but not initialized yet | unchanged, retry pending | see below |
 | `0`, no `sla_Framework` quest | Nothing installed | both flags `false` | abort with notification |
 
 **`GetVersion() == 0` is not "missing" - never abort on it** (the 1.0.6 bug).
-SLA NG / SLO Aroused NG answer out of `slaMainScr`'s **save-persisted**
-`modVersion`, and that stays 0 until their own init has run once:
+SLA NG answers out of `slaMainScr`'s **save-persisted** `modVersion`, and that
+stays 0 until its own init has run once:
 `slaInternalScr.OnInit` arms +5s, `Maintenance()` enters the `initializing`
 state and arms +10s, and only that tick calls `SetVersion`. Our
 `OnPlayerLoadGame` fires in the first second of the load, so on the **first**
