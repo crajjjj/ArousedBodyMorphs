@@ -65,7 +65,15 @@ Inspired by the ArousedNips family of mods and their community forks.
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE).
+Copyright (C) 2025-2026 crajjjj. Aroused BodyMorphs is free software under the
+[GNU General Public License v3.0](LICENSE) or (at your option) any later
+version, and comes with **no warranty**.
+
+The SKSE plugin is built on
+[CommonLibSSE-NG](https://github.com/alandtse/CommonLibSSE-NG), which is
+GPL-3.0, so the mod is distributed under the same terms. The complete
+corresponding source is this repository; the Papyrus sources and a copy of the
+license also ship inside the download (`source\scripts` and `LICENSE.txt`).
 
 [SexLab Aroused]: https://github.com/crajjjj/SexlabArousedNG
 [Pyro]: https://github.com/fireundubh/pyro

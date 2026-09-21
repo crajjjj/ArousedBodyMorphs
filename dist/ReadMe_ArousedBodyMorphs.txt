@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.1.1
+Aroused BodyMorphs 1.1.2
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -96,3 +96,27 @@ If you edit or add one, two rules matter:
 Credits
 -------
 Inspired by the ArousedNips family of mods and their community forks.
+
+
+License
+-------
+Copyright (C) 2025-2026 crajjjj
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. The full, unmodified license text ships beside this file as
+LICENSE.txt, and is also available at <https://www.gnu.org/licenses/>.
+
+The SKSE plugin (ArousedBodyMorphs.dll) is built on CommonLibSSE-NG
+(https://github.com/alandtse/CommonLibSSE-NG), which is GPL-3.0 licensed, so
+this mod is distributed under the same terms. The complete corresponding
+source -- C++ and Papyrus -- is at https://github.com/crajjjj/ArousedBodyMorphs
+and the Papyrus sources also ship in this download under source\scripts.

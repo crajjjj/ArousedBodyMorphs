@@ -67,6 +67,7 @@
         <ZipFile Name="@ModName" RootDir=".\dist" Compression="deflate">
             <Include>ArousedBodyMorphs.esp</Include>
             <Include>ReadMe_ArousedBodyMorphs.txt</Include>
+            <Include>LICENSE.txt</Include>
             <!-- Compiled Papyrus scripts -->
             <Match In="scripts">*.pex</Match>
             <Match In="SKSE">*</Match>

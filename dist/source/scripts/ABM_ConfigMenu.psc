@@ -49,7 +49,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10101
+	return 10102
 endFunction
 
 Event OnVersionUpdate(Int ver)
