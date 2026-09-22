@@ -297,7 +297,7 @@ the effect to be visible in-game (user-side concern, not a code concern).
   a label built by concatenation (title + version, the morph count) cannot be
   translated and is deliberately left literal.
 - Runtime JSON (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`, `ArousedBodyMorphs/suppress.json`) lives in `Data\SKSE\Plugins\StorageUtilData\` — the shipped copies under `dist\SKSE\` are the install defaults. All values stored as strings; readers cast to `int`/`float`, writers must do `(value as int) as string` explicitly.
-- Preset/morph JSON keys use the EXACT morph names from `ABM_Quest.FullMorphSet()` (mixed case) — no normalization layer exists; keep them in sync.
+- JSON value keys are LOWERCASE on disk and must stay so: PapyrusUtil's JsonUtil runs `boost::to_lower` on every key it reads or writes (`ExternalFile::GetValue` / `SetValue` in External.cpp) but parses the file verbatim, and jsoncpp member lookup is case-sensitive, so a hand-authored `"NippleSize"` key is never found (the 1.1.2 bug: presets and Import silently skipped the nipple sliders). The `morphs` string LIST holds values, not keys, so it keeps the exact SKEE slider names from `ABM_Quest.FullMorphSet()` (mixed case); keep the two in sync - the lowercase of every list entry is a value key. Same rule for the body-patch files under `patches\`.
 - JsonUtil API quick-reference: `StringListClear/Count/Get/Add(file, listKey, ...)`, `GetStringValue(file, key, missing)` (third arg positional), `SetStringValue(file, key, value)`.
 - Papyrus does not support named arguments in the stock CK compiler. Always use positional args.
 

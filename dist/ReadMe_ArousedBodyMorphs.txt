@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.1.2
+Aroused BodyMorphs 1.1.3
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -65,6 +65,9 @@ Features
 - Import/Export of all settings + the morph table via JSON
   (SKSE\Plugins\StorageUtilData\ArousedBodyMorphs\config.json + morph.json;
   suppress.json lives there too and is edited by hand, not by the MCM)
+  Value keys inside these files must be lowercase: PapyrusUtil lowercases
+  every key it reads or writes, so a hand-edited "NippleSize" entry is
+  silently skipped. The "morphs" list keeps the exact slider names.
 - Debug mode with a lesser power that dumps an actor's morph state to the
   Papyrus log
 - Optional native SKSE layer (ArousedBodyMorphs.dll): with SexLab Aroused NG

@@ -49,7 +49,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10102
+	return 10103
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -721,6 +721,9 @@ Bool Function ImportUserSettings()
 			string MorphName = StringListGet(MorphFile, "morphs", i)
 			if MorphName != ""
 				MainQuest.MorphNames[in] = MorphName
+				; PapyrusUtil lowercases the lookup key (see ApplyIntensityPreset), so a
+				; hand-edited morph.json must keep its value keys lowercase; the list
+				; entry above keeps the exact slider name.
 				MainQuest.MaxValue[in] = GetStringValue(MorphFile, MorphName, "0") as float
 				in += 1
 			endif
@@ -762,20 +765,34 @@ EndFunction
 
 Function ApplyIntensityPreset(String presetName)
 	{Overwrite MaxValue[i] for every morph the preset has a key for. Morphs it
-	 doesn't cover keep their value, so custom imports aren't zeroed. Preset keys
-	 are exactly the FullMorphSet names -- no normalisation needed.}
+	 doesn't cover keep their value, so custom imports aren't zeroed.
+
+	 Key case: PapyrusUtil lowercases every key it reads or writes
+	 (ExternalFile::GetValue / SetValue, boost::to_lower) but parses the file
+	 verbatim, and the JSON member lookup is case-sensitive. So the lookup for
+	 "NippleSize" only ever hits a key written as "nipplesize": the shipped
+	 files keep their value keys lowercase, and a mixed-case key in a
+	 hand-edited file is silently skipped (the 1.1.2 bug: every preset left the
+	 nipple sliders alone). The "morphs" list is values, not keys, so it keeps
+	 the exact slider names.}
 	String path = "ArousedBodyMorphs/IntensityPresets/" + presetName
 	Load(path)
 	int i = 0
+	int applied = 0
 	String[] morphNames = MainQuest.MorphNames
 	while i < 128 && morphNames[i] != ""
 		String value = GetStringValue(path, morphNames[i], "")
 		If value != ""
 			MainQuest.MaxValue[i] = value as float
+			applied += 1
 		EndIf
 		i += 1
 	EndWhile
 	UnLoad(path, false, false)
+	; One line per selection, so a "the preset did nothing" report can be
+	; checked against the log: 0 of N means the file is missing, unreadable, or
+	; carries no key for the current table (a body patch's table, say).
+	Debug.Trace("ABM: preset " + presetName + " applied " + applied + " of " + i + " morphs")
 EndFunction
 
 Bool Function ExportUserSettings()

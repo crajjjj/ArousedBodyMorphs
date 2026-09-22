@@ -31,6 +31,10 @@ Notes
   UBE-tuned value for it, which is milder than the 3BA original.
 - If you use UBE's *_UV_fix meshes, replace the plain slider names with
   the matching *_UV_fix names via the MCM or by editing morph.json.
+- The value keys in morph.json and the presets are lowercase on purpose:
+  PapyrusUtil lowercases every key it looks up, so a hand-added
+  "AreolaErection" key is never read. The "morphs" list keeps the exact
+  slider names.
 - Mixed load orders (some actors 3BA, some UBE): add the 3BA names to
   morph.json's "morphs" list as well - a body ignores slider names it does
   not define, so a merged table is safe.

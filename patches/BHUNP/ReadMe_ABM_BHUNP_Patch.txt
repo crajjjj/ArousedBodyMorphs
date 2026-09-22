@@ -29,8 +29,10 @@ Notes
   NippleSize, NipplePuffyAreola, ClitorisErection, Clit, PussyMajora.
   The rest appear as MCM sliders at 0 for your own tuning.
 - BHUNP shares several slider names with CBBE 3BA (NippleSize,
-  NippleLength, NipplePerkiness, Clit, NipplePerkManga - JSON keys and
-  morph keys are case-insensitive). The patched presets use BHUNP-tuned
+  NippleLength, NipplePerkiness, Clit, NipplePerkManga). Slider names are
+  case-insensitive, but the value keys in the JSON files must stay
+  lowercase: PapyrusUtil lowercases every key it looks up, so a hand-added
+  "NippleSize" key is never read. The patched presets use BHUNP-tuned
   values for the shared names; in particular NippleSize is now POSITIVE
   (bigger with arousal), while the 3BA original used negative values.
   Pure-3BA setups should not use this patch's presets.

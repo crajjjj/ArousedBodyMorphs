@@ -1,10 +1,10 @@
 {
 	"string" :
 	{
-		"NippleSize" : "-0.400000",
-		"NippleLength" : "0.500000",
-		"NipplePerkiness" : "0.800000",
-		"AreolaSize" : "0.000000",
+		"nipplesize" : "-0.400000",
+		"nipplelength" : "0.500000",
+		"nippleperkiness" : "0.800000",
+		"areolasize" : "0.000000",
 		"nippleperkmanga" : "0.000000",
 		"nippletube_v2" : "0.000000",
 		"innieoutie" : "0.100000",
