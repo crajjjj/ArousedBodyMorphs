@@ -1,6 +1,7 @@
 {
 	"string" :
 	{
+		"tableversion" : "2",
 		"nipplesize" : "-0.170000",
 		"nipplelength" : "0.200000",
 		"nippleperkiness" : "1.170000",
@@ -23,7 +24,27 @@
 		"clit" : "0.500000",
 		"clitswell_v2" : "1.000000",
 		"cutepuffyness" : "0.000000",
-		"cbpc" : "0.000000"
+		"cbpc" : "0.000000",
+		"doublemelon" : "0.000000",
+		"bigbutt" : "0.000000",
+		"ube_nipplesperkiness" : "0.800000",
+		"ube_nipplelength" : "0.300000",
+		"ube_areolaerection" : "0.600000",
+		"ube_nipplesshowup" : "0.000000",
+		"ube_nipplediameter n|p" : "0.000000",
+		"ube_areolaesizebig" : "0.000000",
+		"ube_areolaesizesmall" : "0.000000",
+		"ube_nippleinverted_puffyareola" : "0.000000",
+		"ube_nippleinverted" : "0.000000",
+		"ube_nipples_fantasy" : "0.000000",
+		"ube_clitoriserection" : "0.500000",
+		"ube_pussycute" : "0.000000",
+		"ube_vagina_shape" : "0.000000",
+		"ube_vagina_shape_wider" : "0.000000",
+		"ube_vagina_fantasy" : "0.000000",
+		"ube_vagina_spread" : "0.000000",
+		"ube_breastsbigger" : "0.000000",
+		"ube_glutesize p|n" : "0.000000"
 	},
 	"stringList" :
 	{
@@ -51,7 +72,30 @@
 			"clit",
 			"clitswell_v2",
 			"cutepuffyness",
-			"cbpc"
+			"cbpc",
+			"DoubleMelon",
+			"BigButt"
+		],
+		"morphs_ube" :
+		[
+			"NipplesPerkiness",
+			"NippleLength",
+			"AreolaErection",
+			"NipplesShowUp",
+			"NippleDiameter n|p",
+			"AreolaeSizeBig",
+			"AreolaeSizeSmall",
+			"NippleInverted_PuffyAreola",
+			"Nippleinverted",
+			"Nipples_Fantasy",
+			"ClitorisErection",
+			"PussyCute",
+			"Vagina_shape",
+			"Vagina_shape_wider",
+			"Vagina_Fantasy",
+			"Vagina_spread",
+			"BreastsBigger",
+			"GluteSize p|n"
 		]
 	}
 }

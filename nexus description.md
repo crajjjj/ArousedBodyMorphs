@@ -2,7 +2,7 @@
 
 Nipples, areolas and other morphs in step with Aroused mods arousal. 0 arousal = no morph, 100 = the full value you set in the MCM, linear in between. Works on the player and on nearby NPCs.
 
-The default set targets CBBE 3BA: 23 sliders covering the nipple set, areola, and the 3BA labia/vagina/clit sliders. Pick one of four intensity presets and you are done, or tune every slider yourself. Custom morphs can be added in the morph json.
+The default set targets CBBE 3BA: 23 sliders covering the nipple set, areola, and the 3BA labia/vagina/clit sliders. UBE 2.0 is built in too: a UBE character is recognised by its race and gets UBE's own sliders, so UBE and 3BA characters can share one game. Pick one of four intensity presets and you are done, or tune every slider yourself. Custom morphs can be added in the morph json.
 
 [size=3][b]Requirements[/b][/size]
 [list]
@@ -10,7 +10,7 @@ The default set targets CBBE 3BA: 23 sliders covering the nipple set, areola, an
 [*]RaceMenu (SKEE / NiOverride), for the BodyMorph API[/*]
 [*]PapyrusUtil[/*]
 [*]SexLab Aroused, any flavour: SexLab Aroused NG / SLO Aroused NG (recommended), OSL Aroused, or legacy SLAX / SSELoose / eXtended[/*]
-[*]A 3BA-compatible body built in BodySlide [b]with "Build Morphs" checked[/b]. Without morph data nothing is visible in game.[/*]
+[*]A CBBE 3BA or UBE 2.0 body built in BodySlide [b]with "Build Morphs" checked[/b] (BHUNP through the separate body patch). Without morph data nothing is visible in game.[/*]
 [*]Optional: Advanced Nudity Detection, for better "under armor" detection on bikinis and skimpy tops[/*]
 [/list]
 [b]SexLab itself is not required.[/b] The masters are Skyrim, Update and SexLabAroused only, so OStim-only setups load fine.
@@ -18,7 +18,9 @@ The default set targets CBBE 3BA: 23 sliders covering the nipple set, areola, an
 [size=3][b]Features[/b][/size]
 [list]
 [*][b]Intensity presets:[/b] Minimal, Natural, Noticeable, Exaggerated. Natural is the install default.[/*]
-[*][b]Per-morph sliders[/b] grouped by area (Nipples / Areolas / Vagina / Other), in 0.01 steps.[/*]
+[*][b]Per-morph sliders[/b] grouped by area (Nipples / Areolas / Vagina / Breasts / Butt / Other), in 0.01 steps.[/*]
+[*][b]Per-actor bodies:[/b] UBE races take the built-in UBE table, everyone else the main one. Each table keeps its own values, and the MCM switches between them.[/*]
+[*][b]Optional breast / butt swell[/b] for the player only. Off until you raise the sliders, and never applied to NPCs.[/*]
 [*][b]Under-armor suppression:[/b] morphs flatten while the chest is covered so nothing clips through tops, then ease back in over about a second when the top comes off.[/*]
 [*][b]Actor filters:[/b] ignore males, dead actors, male or female creatures. NPC scan radius is adjustable, and 0 means "only me".[/*]
 [*][b]Master switch:[/b] turning the mod off clears every morph it owns and goes fully dormant. Your tuning is kept.[/*]

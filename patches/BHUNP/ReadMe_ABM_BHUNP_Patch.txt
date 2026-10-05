@@ -7,12 +7,15 @@ official "BHUNP Skyrim Vanilla Outfits" BodySlide projects.
 
 What it does
 ------------
-- morph.json: replaces the default CBBE 3BA morph table with 20 BHUNP
-  slider names (NippleErection, NipplePerkiness, NipplePuffyAreola,
-  ClitorisErection, PussyMajora, ...).
+- morph.json: replaces the MAIN morph table (CBBE 3BA by default) with 20
+  BHUNP slider names (NippleErection, NipplePerkiness, NipplePuffyAreola,
+  ClitorisErection, PussyMajora, ...) plus the two swell sliders, DoubleMelon
+  and BigButt, at 0. The built-in UBE table is not touched: the file lists
+  the main table only, and Import leaves a table it does not list alone.
 - IntensityPresets (Minimal/Natural/Noticeable/Exaggerated): extended with
   the BHUNP slider keys. The 3BA keys are still included, so presets keep
-  working if you re-import a 3BA or merged morph table later.
+  working if you re-import a 3BA or merged morph table later, and so are the
+  UBE table's ("ube_" keys).
 
 Install
 -------
@@ -39,7 +42,13 @@ Notes
 - Mixed load orders (some actors 3BA, some BHUNP): add the 3BA names to
   morph.json's "morphs" list as well - a body ignores slider names it
   does not define, so a merged table is safe. Shared names will drive
-  both bodies with the same value.
+  both bodies with the same value. The two cannot be split per actor the
+  way UBE is: both sit on the vanilla races, so nothing tells them apart.
+- UBE characters are unaffected by this patch. They are recognised by
+  race and use the built-in UBE table.
+- DoubleMelon and BigButt are the optional breast / butt swell, for the
+  player only. Both grow with a positive value on BHUNP. Do not swap in
+  Butt: on BHUNP that slider is inverted and shrinks with a positive value.
 
 Under armor
 -----------

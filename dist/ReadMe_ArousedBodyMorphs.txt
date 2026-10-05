@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.1.3
+Aroused BodyMorphs 1.2.0
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -12,9 +12,18 @@ per-morph value you set in the MCM, linear in between. Works on the player and
 on nearby NPCs.
 
 The default morph set targets CBBE 3BA slider names (23 sliders: nipple set,
-areola, and the 3BA labia/vagina/clit set). The MCM groups the sliders by area
-(Nipples / Areolas / Vagina / Other). Any custom morph list can be imported via
-JSON; imported morphs sort themselves into the area groups by name.
+areola, and the 3BA labia/vagina/clit set). UBE 2.0 is built in as a second
+table: a UBE character is recognised by its race and gets UBE's own sliders
+automatically, so UBE and 3BA characters can share one game. The MCM shows one
+table at a time ("Body table" on the Morphs page) and groups its sliders by
+area (Nipples / Areolas / Vagina / Breasts / Butt / Other). Any custom morph
+list can be imported via JSON; imported morphs sort themselves into the area
+groups by name.
+
+Optional swell: each table also carries a breast and a butt slider (DoubleMelon
+and BigButt on the main table, BreastsBigger and GluteSize p|n on UBE's). They
+start at 0, so nothing swells until you raise them, and they apply to the
+PLAYER only.
 
 A BodySlide-built body (and body-armor) WITH morph data ("Build Morphs" checked)
 is required for anything to be visible in game.
@@ -28,8 +37,8 @@ Requirements
 - SexLab Aroused -- any flavor: SexLab Aroused NG, published on Nexus as
   SLO Aroused NG (recommended), OSL Aroused (its SLA stub),
   SLAX / SSELoose / eXtended (legacy)
-- A 3BA-compatible body built in BodySlide with morphs (or import your own
-  morph list for other bodies)
+- A CBBE 3BA or UBE 2.0 body built in BodySlide with morphs (BHUNP through
+  the separate body patch, or import your own morph list for other bodies)
 - Optional: Advanced Nudity Detection -- improves the "under armor" detection
   for skimpy/bikini tops
 
@@ -37,8 +46,19 @@ Requirements
 Features
 --------
 - Per-morph max-value sliders (0.01 step, -3..3), grouped by area in the MCM
+- Per-actor body tables: an actor of a UBE race takes the built-in UBE table,
+  everyone else the main one (CBBE 3BA out of the box, or whatever a body
+  patch imported). Each table keeps its own values, also for a slider name
+  both bodies have, such as NippleLength. The separate UBE body patch of
+  earlier versions is no longer needed: uninstall it, its imported table is
+  taken over as the UBE table on the next load
+- Optional breast / butt swell for the player: the Breasts and Butt groups,
+  off (0) until you raise them, and never applied to NPCs. The swell is not
+  suppressed under armor, so outfits must be built with morphs to follow the
+  shape (add "breasts" to suppress.json to flatten it under a top instead)
 - Intensity presets: Minimal / Natural / Noticeable / Exaggerated
-  (install default is Natural)
+  (install default is Natural). They cover both tables and leave the swell
+  sliders alone
 - Master "Mod enabled" switch -- turning it off clears every morph this mod
   owns and puts it fully dormant
 - Player poll (default 5s, configurable, 0 = off) for mid-scene responsiveness;
@@ -54,9 +74,9 @@ Features
   sliders of all three supported bodies, by name, and nothing else -- since
   "covered" is a chest test it says nothing about the rest, and a skimpy
   armor can leave those on show. Add or remove names to taste; an entry can
-  also be a whole area (nipples / areolas / vagina / other), which is the
-  one-liner for a body whose sliders aren't listed. Read on every game load
-  and on Import Settings
+  also be a whole area (nipples / areolas / vagina / breasts / butt / other),
+  which is the one-liner for a body whose sliders aren't listed. Read on
+  every game load and on Import Settings
 - Actor filters: ignore males / dead / male beasts / female beasts;
   NPC scan radius (0 = player only)
 - Translated MCM in 11 languages: English, Chinese, Czech, French, German,
@@ -68,6 +88,10 @@ Features
   Value keys inside these files must be lowercase: PapyrusUtil lowercases
   every key it reads or writes, so a hand-edited "NippleSize" entry is
   silently skipped. The "morphs" list keeps the exact slider names.
+  morph.json holds one list per table -- "morphs" for the main one and
+  "morphs_ube" for UBE's, whose value keys carry a "ube_" prefix -- and a
+  table the file does not list is left as it is. A file written before 1.2.0
+  (one list, no "tableversion") still imports.
 - Debug mode with a lesser power that dumps an actor's morph state to the
   Papyrus log
 - Optional native SKSE layer (ArousedBodyMorphs.dll): with SexLab Aroused NG

@@ -4,7 +4,8 @@ ScriptName ABM_Native Hidden
  With the DLL installed and a backend detected, it takes over the whole update
  pipeline -- per-actor refreshes, the player poll, armor changes and the SKEE
  writes -- off the Papyrus VM. Papyrus keeps the MCM and settings, mirroring
- them here via PushConfig / PushMorphTable / PushSuppressFlags.
+ them here via PushConfig / PushMorphTable / PushSuppressFlags /
+ PushMorphScopes.
 
  Without the DLL every native here is unbound: ALWAYS gate on IsInstalled(),
  which needs only SKSE. ABM_PlayerAlias.NativeActive() is the combined gate.}
@@ -13,6 +14,15 @@ Bool Function IsInstalled() Global
 	{True when the DLL is registered with SKSE. Safe to call unconditionally;
 	 the natives below are only callable when it is true.}
 	Return SKSE.GetPluginVersion("ArousedBodyMorphs") > 0
+EndFunction
+
+Bool Function SupportsScopes() Global
+	{True when the installed DLL is 1.2.0 or newer, i.e. it exports
+	 PushMorphScopes and filters slots per actor. An older DLL writes every slot
+	 it is given to every actor, so it must be handed the main table alone --
+	 see ABM_PlayerAlias.PushConfigToNative. The version is the DLL's own,
+	 packed major<<24 | minor<<16 | patch<<4 (REL::Version::pack).}
+	Return SKSE.GetPluginVersion("ArousedBodyMorphs") >= 0x01020000
 EndFunction
 
 Bool Function IsActive() Global Native
@@ -49,3 +59,12 @@ Function PushSuppressFlags(Int[] suppressed) Global Native
  makes it last, so a scripts-only update degrades to that DLL's old behaviour
  (scale everything while covered) instead of leaving it with no morph table at
  all -- i.e. a silently dead mod.}
+
+Function PushMorphScopes(Int[] bodies, Int[] playerOnly) Global Native
+{Say which actors each slot of the pushed table is for, parallel to
+ PushMorphTable's arrays: bodies = ABM_Quest.MorphBody (0 main table, 1 UBE),
+ playerOnly = ABM_Quest.MorphPlayerOnly (1 = the player alone). The DLL then
+ writes a slot only to an actor of that body, and a player-only slot only to
+ the player.
+
+ Exported from 1.2.0 on: gate on SupportsScopes(), never call it blind.}

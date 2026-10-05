@@ -38,14 +38,16 @@ float Property DefaultUnderArmorScale = 0.0 AutoReadOnly Hidden
 
 ; WHICH morphs UnderArmorScale reaches is data, not an MCM option: suppress.json
 ; holds one list whose entries are either an exact morph name or an area keyword
-; (nipples / areolas / vagina / other, matched via GroupForMorph, which is the
-; one-liner for a body whose sliders aren't listed). SHIPS as the nipple +
-; areola slider names of 3BA, UBE and BHUNP -- nothing below the chest, since
-; "covered" is a CHEST test and says nothing about a vagina slider, which a
-; skimpy armor leaves on show anyway. A body outside that list therefore gets no
-; suppression until its names (or a keyword) are added: that is the cost of an
-; explicit list, and the readme says so. Edit the file to widen or narrow it;
-; the MCM toggle stays a plain on/off.
+; (nipples / areolas / vagina / breasts / butt / other, matched via
+; GroupForMorph, which is the one-liner for a body whose sliders aren't
+; listed). SHIPS as the nipple + areola slider names of 3BA, UBE and BHUNP --
+; nothing below the chest, since "covered" is a CHEST test and says nothing
+; about a vagina or butt slider, which a skimpy armor leaves on show anyway.
+; The breast swell is deliberately NOT on the list either: it stays under a
+; top (add "breasts" to the file to flatten it there). A body outside that
+; list therefore gets no suppression until its names (or a keyword) are added:
+; that is the cost of an explicit list, and the readme says so. Edit the file
+; to widen or narrow it; the MCM toggle stays a plain on/off.
 String Property SuppressFile = "ArousedBodyMorphs/suppress.json" AutoReadOnly Hidden
 
 string[] Property MorphNames Auto Hidden
@@ -59,6 +61,27 @@ float[] Property MaxDefault Auto Hidden
 ; which is what makes a hand-edited file take effect).
 int[] Property MorphSuppressed Auto Hidden
 bool Property AnyMorphSuppressed = false Auto Hidden
+
+; Which body table each MorphNames slot belongs to: BODY_MAIN (the body this
+; game was built for -- CBBE 3BA out of the box, or whatever a body patch
+; imported) or BODY_UBE. ONE array of slots holds both tables, so a slider name
+; can sit in it twice with a value per body (NippleLength does), and an actor
+; only ever gets the slots of its own body -- see BodyOf.
+; PRIMARY state, not derived: a name alone cannot say which table it is in.
+int[] Property MorphBody Auto Hidden
+int Property BODY_MAIN = 0 AutoReadOnly Hidden
+int Property BODY_UBE  = 1 AutoReadOnly Hidden
+
+; 1 per slot that applies to the PLAYER only, 0 otherwise: the swell groups
+; (Breasts, Butt -- see IsSwellGroup). Derived from GroupForMorph by
+; RebuildMorphTables, exactly like MorphSuppressed, and pushed to the DLL the
+; same way.
+int[] Property MorphPlayerOnly Auto Hidden
+
+; Layout version of the table above. 0 on a save from before 1.2.0, which held
+; one body and no MorphBody; EnsureBodyTables upgrades those once, on load.
+int Property TableVersion = 0 Auto Hidden
+int Property CurrentTableVersion = 2 AutoReadOnly Hidden
 
 ; Install defaults = the "Natural" tier (matches IntensityPresets\Natural.json).
 ; AutoReadOnly = compiled constants, not cosave-persisted, so an updated .pex
@@ -158,8 +181,9 @@ EndFunction
 Function ResetDefaults()
 	{Rebuild everything derived from MorphNames -- MaxDefault (from
 	 DefaultForMorph, so it stays right for imported tables too: unknown -> 0)
-	 and the suppression flags. Both live here rather than in separate calls so
-	 no path can refresh one and leave the other stale.}
+	 and the per-slot flags. All of it lives here rather than in separate calls
+	 so no path can refresh one and leave another stale. A table from before
+	 1.2.0 is brought up to the per-body layout first; see EnsureBodyTables.}
 	MaxDefault = new float[128]
 	If !MorphNames
 		; Corrupt / not-yet-built table (the state "Reset all state" exists to
@@ -170,12 +194,129 @@ Function ResetDefaults()
 		RebuildMorphTables()
 		return
 	EndIf
+	EnsureBodyTables()
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
-		MaxDefault[i] = DefaultForMorph(MorphNames[i])
+		MaxDefault[i] = DefaultForMorph(MorphNames[i], MorphBody[i])
 		i += 1
 	EndWhile
 	RebuildMorphTables()
+EndFunction
+
+Function EnsureBodyTables()
+	{One-time upgrade of a table saved (or imported from a file written) before
+	 1.2.0, which held a single body and had no MorphBody. Keyed on
+	 TableVersion, so it is one compare on every later load.
+
+	 Lives on the load path, NOT in the MCM's OnVersionUpdate: that event fires
+	 inside SkyUI's registration pass, and reaching across to this script from
+	 there froze the game in the predecessor mod.
+
+	 Non-destructive -- every existing slot keeps its tuned value, and only its
+	 body tag is decided here:
+	 - A slot goes to the UBE table when its name is one only UBE has. The three
+	   names UBE shares with another body (NippleLength with 3BA and BHUNP,
+	   ClitorisErection and PussyCute with BHUNP) say nothing on their own, so
+	   they stay on the main table...
+	 - ...unless the WHOLE table is UBE names, which is the old UBE body patch
+	   imported as-is: then every slot is UBE's, and the main table, left empty,
+	   gets the built-in set at its defaults.
+	 Whatever the UBE table still lacks is then appended at UBE's defaults, and
+	 the swell entries arrive at 0 on both, so nothing changes on screen for a
+	 body that was already set up.}
+	If TableVersion >= CurrentTableVersion
+		return
+	EndIf
+	If !MorphNames
+		; Corrupt table. "Reset all state" rebuilds it at the current version.
+		return
+	EndIf
+	MorphBody = new int[128]
+	String[] ubeSet = UbeMorphSet()
+	Int count = MorphCount()
+
+	Bool anyUbeOnly = false
+	Bool anyOther = false
+	Int i = 0
+	While i < count
+		If IsUbeOnlyName(MorphNames[i], ubeSet)
+			anyUbeOnly = true
+		ElseIf !NameInSet(ubeSet, MorphNames[i])
+			anyOther = true
+		EndIf
+		i += 1
+	EndWhile
+	Bool pureUbe = anyUbeOnly && !anyOther
+
+	i = 0
+	While i < count
+		If pureUbe || IsUbeOnlyName(MorphNames[i], ubeSet)
+			MorphBody[i] = BODY_UBE
+		EndIf
+		i += 1
+	EndWhile
+
+	If pureUbe
+		count = AppendMorphSet(FullMorphSet(), BODY_MAIN, count)
+	EndIf
+	count = AppendMorphSet(MainSwellSet(), BODY_MAIN, count)
+	count = AppendMorphSet(ubeSet, BODY_UBE, count)
+	AppendMorphSet(UbeSwellSet(), BODY_UBE, count)
+
+	TableVersion = CurrentTableVersion
+	Debug.Trace("ABM: morph table upgraded to per-body slots (" + MorphCount() + " morphs)")
+EndFunction
+
+Bool Function NameInSet(String[] names, String morphName)
+	{True when morphName is in the list. Papyrus string compare is
+	 case-insensitive, as slider names are.}
+	Int i = 0
+	While i < names.Length
+		If names[i] == morphName
+			Return true
+		EndIf
+		i += 1
+	EndWhile
+	Return false
+EndFunction
+
+Bool Function IsUbeOnlyName(String morphName, String[] ubeSet)
+	{True for a UBE slider name no other supported body has -- the only names
+	 that prove a slot was meant for UBE. See EnsureBodyTables. ubeSet is
+	 UbeMorphSet(), passed in so a loop builds it once.}
+	If morphName == "NippleLength" || morphName == "ClitorisErection" || morphName == "PussyCute"
+		Return false
+	EndIf
+	If morphName == "BreastsBigger" || morphName == "GluteSize p|n"
+		; UBE's swell pair (UbeSwellSet), which the table list doesn't carry.
+		Return true
+	EndIf
+	Return NameInSet(ubeSet, morphName)
+EndFunction
+
+Int Function BodyOf(Actor who)
+	{Which table an actor takes: BODY_UBE for a UBE race, BODY_MAIN for everyone
+	 else. UBE is the one body that can be told apart per actor, because it
+	 ships its own playable races and every one of them has "UBE_" in its
+	 EditorID (00UBE_BretonRace, 00UBE_CustomRace01, ...). CBBE 3BA and BHUNP
+	 both sit on the vanilla races, so nothing distinguishes them per actor:
+	 they share the main table, and which of the two it holds is the install's
+	 business. Find is case-insensitive. Mirrored by BodyOf in the DLL's
+	 MorphApplier.cpp -- keep the two tests identical.}
+	If StringUtil.Find(MiscUtil.GetActorRaceEditorID(who), "UBE_") >= 0
+		Return BODY_UBE
+	EndIf
+	Return BODY_MAIN
+EndFunction
+
+String Function MorphKey(Int slot)
+	{The JSON value key of one slot, for morph.json and the intensity presets.
+	 A UBE slot is prefixed, because a file has one key per name and the same
+	 name can be in both tables. JsonUtil lowercases keys on its own.}
+	If MorphBody[slot] == BODY_UBE
+		Return "ube_" + MorphNames[slot]
+	EndIf
+	Return MorphNames[slot]
 EndFunction
 
 Function RebuildMorphTables()
@@ -190,7 +331,14 @@ Function RebuildMorphTables()
 	 Called from ResetDefaults (every path that rewrites the table) and from
 	 OnPlayerLoadGame, which is what makes a hand-edited file take effect.}
 	MorphSuppressed = new int[128]
+	MorphPlayerOnly = new int[128]
 	AnyMorphSuppressed = false
+	If !MorphBody
+		; Never None for the writer, whatever state the save is in. All zeros
+		; means "every slot is the main table", which is what a table that has
+		; not been through EnsureBodyTables yet holds.
+		MorphBody = new int[128]
+	EndIf
 	If !MorphNames
 		; Corrupt / not-yet-built table (the state "Reset all state" exists to
 		; recover from). Indexing it would throw and take the rest of
@@ -215,7 +363,11 @@ Function RebuildMorphTables()
 
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
-		String area = GroupKeyword(GroupForMorph(MorphNames[i]))
+		Int grp = GroupForMorph(MorphNames[i])
+		If IsSwellGroup(grp)
+			MorphPlayerOnly[i] = 1
+		EndIf
+		String area = GroupKeyword(grp)
 		Int r = 0
 		While r < ruleCount
 			; Papyrus string compare is case-insensitive, so a hand-typed
@@ -239,6 +391,22 @@ Int[] Function GetMorphSuppressed()
 		RebuildMorphTables()
 	EndIf
 	Return MorphSuppressed
+EndFunction
+
+Int[] Function GetMorphBody()
+	{The body tag per slot, with the same on-demand fallback.}
+	If !MorphBody
+		RebuildMorphTables()
+	EndIf
+	Return MorphBody
+EndFunction
+
+Int[] Function GetMorphPlayerOnly()
+	{The player-only flags, with the same on-demand fallback.}
+	If !MorphPlayerOnly
+		RebuildMorphTables()
+	EndIf
+	Return MorphPlayerOnly
 EndFunction
 
 String[] Function FullMorphSet()
@@ -272,59 +440,146 @@ String[] Function FullMorphSet()
 	Return names
 EndFunction
 
+String[] Function UbeMorphSet()
+	{The UBE 2.0 slider list: the built-in UBE table, which UBE-race actors take
+	 instead of the main one (see BodyOf). Names as in "UBE SE 2.0 Release
+	 Body.osp". NippleLength is on both lists -- UBE has a slider of that name
+	 too, with its own tuning, which is exactly why a body gets its own slots.}
+	String[] names = new String[16]
+	names[0]  = "NipplesPerkiness"
+	names[1]  = "NippleLength"
+	names[2]  = "AreolaErection"
+	names[3]  = "NipplesShowUp"
+	names[4]  = "NippleDiameter n|p"
+	names[5]  = "AreolaeSizeBig"
+	names[6]  = "AreolaeSizeSmall"
+	names[7]  = "NippleInverted_PuffyAreola"
+	names[8]  = "Nippleinverted"
+	names[9]  = "Nipples_Fantasy"
+	names[10] = "ClitorisErection"
+	names[11] = "PussyCute"
+	names[12] = "Vagina_shape"
+	names[13] = "Vagina_shape_wider"
+	names[14] = "Vagina_Fantasy"
+	names[15] = "Vagina_spread"
+	Return names
+EndFunction
+
+String[] Function MainSwellSet()
+	{Breast and butt swell for the main table. Both names exist, and grow with a
+	 POSITIVE value, on CBBE 3BA and on BHUNP alike (checked against both
+	 bodies' BodySlide data), so one pair serves either install. Not Butt: that
+	 slider grows on 3BA and shrinks on BHUNP. They default to 0, so the swell
+	 is opt-in, and they land in the swell groups, which are player-only.}
+	String[] names = new String[2]
+	names[0] = "DoubleMelon"
+	names[1] = "BigButt"
+	Return names
+EndFunction
+
+String[] Function UbeSwellSet()
+	{The same pair for the UBE table. A positive GluteSize is the bigger one,
+	 despite the " p|n" in its name (checked against UBE's BodySlide data).}
+	String[] names = new String[2]
+	names[0] = "BreastsBigger"
+	names[1] = "GluteSize p|n"
+	Return names
+EndFunction
+
 Function ApplyMorphSet()
 	{Rebuild the whole table at default values -- install / Reset only. Does NOT
 	 preserve tuning; use EnsureFullMorphSet for a non-destructive upgrade.
 	 Morphs the body doesn't define are no-ops.}
 	MorphNames = new String[128]
 	MaxValue   = new float[128]
+	MorphBody  = new int[128]
 
-	String[] full = FullMorphSet()
-	Int i = 0
-	While i < full.Length
-		MorphNames[i] = full[i]
-		MaxValue[i]   = DefaultForMorph(full[i])
-		i += 1
-	EndWhile
+	AppendAllSets(0)
+	TableVersion = CurrentTableVersion
 
 	ResetDefaults()
 EndFunction
 
 Function EnsureFullMorphSet()
 	{Non-destructive upgrade: append missing morphs, preserving existing tuning.
-	 No caller yet -- kept so a future FullMorphSet addition can reach old saves
-	 without wiping their sliders.}
-	String[] full = FullMorphSet()
-	Int count = MorphCount()
-	Int i = 0
-	While i < full.Length
-		count = AddMorphIfMissing(full[i], count)
-		i += 1
-	EndWhile
+	 No caller yet -- kept so a future addition to one of the built-in sets can
+	 reach old saves without wiping their sliders.}
+	AppendAllSets(MorphCount())
 	ResetDefaults()
 EndFunction
 
-Int Function AddMorphIfMissing(String morphName, Int count)
-	{Append morphName if absent, returning the new count. Bounded to 128.}
+Function EnsureSwellSlots()
+	{Append the swell entries to whichever table lacks them, at 0. For Import: a
+	 file need not list them, and they should be on the page regardless.
+
+	 Only on a table that already carries its body tags. An old-layout table
+	 (TableVersion behind) gets them from EnsureBodyTables instead, which
+	 rebuilds the tags from the names -- appending here first would hand it two
+	 UBE-tagged slots it then has to guess about.}
+	If TableVersion < CurrentTableVersion
+		return
+	EndIf
+	Int count = AppendMorphSet(MainSwellSet(), BODY_MAIN, MorphCount())
+	AppendMorphSet(UbeSwellSet(), BODY_UBE, count)
+EndFunction
+
+Int Function AppendAllSets(Int count)
+	{Append whatever the two tables lack of their built-in sets, main first.
+	 Returns the new count.}
+	count = AppendMorphSet(FullMorphSet(), BODY_MAIN, count)
+	count = AppendMorphSet(MainSwellSet(), BODY_MAIN, count)
+	count = AppendMorphSet(UbeMorphSet(), BODY_UBE, count)
+	Return AppendMorphSet(UbeSwellSet(), BODY_UBE, count)
+EndFunction
+
+Int Function AppendMorphSet(String[] names, Int body, Int count)
+	{Append every listed name that body's table doesn't hold yet, at its
+	 default. Returns the new count.}
+	Int i = 0
+	While i < names.Length
+		count = AddMorphIfMissing(names[i], count, body)
+		i += 1
+	EndWhile
+	Return count
+EndFunction
+
+Int Function AddMorphIfMissing(String morphName, Int count, Int body = 0)
+	{Append morphName to one body's table if that table lacks it, returning the
+	 new count. The same name on the OTHER body's table is not a match. Bounded
+	 to 128.}
 	If count >= 128
 		Return count
 	EndIf
 	Int i = 0
 	While i < count
-		If MorphNames[i] == morphName
+		If MorphNames[i] == morphName && MorphBody[i] == body
 			Return count
 		EndIf
 		i += 1
 	EndWhile
 	MorphNames[count] = morphName
-	MaxValue[count]   = DefaultForMorph(morphName)
+	MorphBody[count]  = body
+	MaxValue[count]   = DefaultForMorph(morphName, body)
 	Return count + 1
 EndFunction
 
-Float Function DefaultForMorph(String morphName)
-	{Per-morph defaults (Natural tier -- keep in sync with Natural.json). Nipples
-	 use the Default* properties; the genital set lists only non-zero values;
-	 everything else defaults to 0.}
+Float Function DefaultForMorph(String morphName, Int body = 0)
+	{Per-morph defaults (Natural tier -- keep in sync with Natural.json), per
+	 BODY, since one name can default differently on each (NippleLength). Main
+	 table: nipples use the Default* properties and the genital set lists only
+	 non-zero values. Everything else, the swell entries included, is 0.}
+	If body == BODY_UBE
+		If morphName == "NipplesPerkiness"
+			Return 0.8
+		ElseIf morphName == "NippleLength"
+			Return 0.3
+		ElseIf morphName == "AreolaErection"
+			Return 0.6
+		ElseIf morphName == "ClitorisErection"
+			Return 0.5
+		EndIf
+		Return 0.0
+	EndIf
 	If morphName == "NippleSize"
 		Return DefaultSize
 	ElseIf morphName == "NippleLength"
@@ -360,16 +615,32 @@ EndFunction
 
 Int Function GroupForMorph(String morphName)
 	{Area group inferred from the name, so imported morphs sort themselves:
-	 0 Nipples, 1 Areolas, 2 Vagina, 3 Other. Find is case-insensitive, and
-	 order is priority -- "nipple" wins over "areola" in one name.}
+	 0 Nipples, 1 Areolas, 2 Vagina, 3 Breasts, 4 Butt, 5 Other. Find is
+	 case-insensitive, and order is priority -- "nipple" wins over "areola" in
+	 one name. Breasts and Butt are the swell groups (IsSwellGroup). The ids are
+	 never persisted, only compared, and Other stays last so it draws last.}
 	If StringUtil.Find(morphName, "nipple") >= 0
 		Return 0
 	ElseIf StringUtil.Find(morphName, "areola") >= 0
 		Return 1
 	ElseIf StringUtil.Find(morphName, "labia") >= 0 || StringUtil.Find(morphName, "vagina") >= 0 || StringUtil.Find(morphName, "pussy") >= 0 || StringUtil.Find(morphName, "clit") >= 0 || StringUtil.Find(morphName, "innie") >= 0 || StringUtil.Find(morphName, "cute") >= 0
 		Return 2
+	ElseIf StringUtil.Find(morphName, "breast") >= 0 || StringUtil.Find(morphName, "melon") >= 0
+		Return 3
+	ElseIf StringUtil.Find(morphName, "butt") >= 0 || StringUtil.Find(morphName, "glute") >= 0 || StringUtil.Find(morphName, "cheek") >= 0
+		Return 4
 	EndIf
-	Return 3
+	Return 5
+EndFunction
+
+; How many area groups GroupForMorph can return; the MCM draws them in id order.
+int Property GroupCount = 6 AutoReadOnly Hidden
+
+Bool Function IsSwellGroup(Int groupId)
+	{True for Breasts and Butt. A morph in a swell group applies to the PLAYER
+	 only: on an NPC it is simply not part of the table. The built-in swell
+	 entries live here, and so does any imported slider whose name sorts in.}
+	Return groupId == 3 || groupId == 4
 EndFunction
 
 String Function GroupKeyword(Int groupId)
@@ -382,6 +653,10 @@ String Function GroupKeyword(Int groupId)
 		Return "areolas"
 	ElseIf groupId == 2
 		Return "vagina"
+	ElseIf groupId == 3
+		Return "breasts"
+	ElseIf groupId == 4
+		Return "butt"
 	EndIf
 	Return "other"
 EndFunction
@@ -407,6 +682,10 @@ String Function GroupName(Int groupId)
 		Return "$ABM_Group_Areolas"
 	ElseIf groupId == 2
 		Return "$ABM_Group_Vagina"
+	ElseIf groupId == 3
+		Return "$ABM_Group_Breasts"
+	ElseIf groupId == 4
+		Return "$ABM_Group_Butt"
 	EndIf
 	Return "$ABM_Group_Other"
 EndFunction

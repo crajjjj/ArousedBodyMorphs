@@ -6,8 +6,8 @@
 #include "Settings.h"
 
 // Bindings for ABM_Native.psc. Papyrus owns all persisted settings and mirrors
-// them here via PushConfig / PushMorphTable / PushSuppressFlags on load and
-// on any MCM change.
+// them here via PushConfig / PushMorphTable / PushSuppressFlags /
+// PushMorphScopes on load and on any MCM change.
 
 namespace ABM::Papyrus
 {
@@ -88,6 +88,18 @@ namespace ABM::Papyrus
 			Settings::PushSuppressFlags(suppressed);
 			logger::info("Suppression flags pushed from Papyrus ({} entries)", suppressed.size());
 		}
+
+		// Also follows PushMorphTable: which body each slot is for, and which
+		// slots are the player's alone. Scripts older than 1.2.0 never call it,
+		// which leaves every slot on the main table and open to every actor,
+		// i.e. the single-table behaviour those scripts expect.
+		void PushMorphScopes(RE::StaticFunctionTag*,
+			std::vector<int32_t> bodies, std::vector<int32_t> playerOnly)
+		{
+			Settings::PushMorphScopes(bodies, playerOnly);
+			logger::info("Morph scopes pushed from Papyrus ({} body tags, {} player-only flags)",
+				bodies.size(), playerOnly.size());
+		}
 	}
 
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* vm)
@@ -99,6 +111,7 @@ namespace ABM::Papyrus
 		vm->RegisterFunction("PushConfig", PapyrusClass, PushConfig);
 		vm->RegisterFunction("PushMorphTable", PapyrusClass, PushMorphTable);
 		vm->RegisterFunction("PushSuppressFlags", PapyrusClass, PushSuppressFlags);
+		vm->RegisterFunction("PushMorphScopes", PapyrusClass, PushMorphScopes);
 		return true;
 	}
 }

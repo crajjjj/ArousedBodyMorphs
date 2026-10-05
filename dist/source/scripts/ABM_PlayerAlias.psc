@@ -95,11 +95,47 @@ Function PushConfigToNative()
 		return
 	EndIf
 	ABM_Native.PushConfig(MainQuest.ModEnabled, MainQuest.IgnoreMales, MainQuest.IgnoreDead, MainQuest.IgnoreMaleBeast, MainQuest.IgnoreFemaleBeast, MainQuest.SuppressUnderArmor, MainQuest.UnderArmorScale, MainQuest.PollInterval, MainQuest.ScanCellRadius, MainQuest.DebugMode)
+	If !ABM_Native.SupportsScopes()
+		; A DLL from before 1.2.0 writes every slot it holds to every actor.
+		PushMainTableToNative()
+		return
+	EndIf
 	ABM_Native.PushMorphTable(MainQuest.MorphNames, MainQuest.MaxValue)
-	; LAST, and deliberately so: suppress.json is read in one place (Papyrus) and
-	; the flags are the only thing here a pre-1.1.0 DLL can't take, so everything
-	; above has already landed if this call finds no native to bind to.
+	; AFTER the table, and deliberately so: suppress.json is read in one place
+	; (Papyrus) and the flags are the only thing here a pre-1.1.0 DLL can't take,
+	; so everything above has already landed if this call finds no native to
+	; bind to.
 	ABM_Native.PushSuppressFlags(MainQuest.GetMorphSuppressed())
+	ABM_Native.PushMorphScopes(MainQuest.GetMorphBody(), MainQuest.GetMorphPlayerOnly())
+EndFunction
+
+Function PushMainTableToNative()
+	{The table as a pre-1.2.0 DLL understands it: one body, no player-only
+	 slots. That DLL has no per-actor filter, so handing it the full table would
+	 put the UBE values of shared names on everyone and the swell on every NPC.
+	 It gets the main table without the swell groups instead, which is exactly
+	 the table it shipped with.}
+	String[] allNames  = MainQuest.MorphNames
+	Float[]  allValues = MainQuest.MaxValue
+	Int[] allFlags   = MainQuest.GetMorphSuppressed()
+	Int[] bodies     = MainQuest.GetMorphBody()
+	Int[] playerOnly = MainQuest.GetMorphPlayerOnly()
+	String[] names = new String[128]
+	Float[] values = new Float[128]
+	Int[] flags    = new Int[128]
+	Int n = 0
+	Int i = 0
+	While i < 128 && allNames[i] != ""
+		If bodies[i] == 0 && playerOnly[i] == 0
+			names[n]  = allNames[i]
+			values[n] = allValues[i]
+			flags[n]  = allFlags[i]
+			n += 1
+		EndIf
+		i += 1
+	EndWhile
+	ABM_Native.PushMorphTable(names, values)
+	ABM_Native.PushSuppressFlags(flags)
 EndFunction
 
 slaFrameworkScr Function GetFramework()
@@ -752,6 +788,12 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	 change, a save load, or an external clear, because the target moves with the
 	 settings. DO NOT replace it with a remembered value.
 
+	 Not every slot is this actor's. The table holds two bodies (a UBE race takes
+	 the UBE slots, everyone else the main ones -- MainQuest.BodyOf) and the
+	 swell groups are the player's alone. A slot that fails either test is NOT
+	 written as 0: it is simply not part of this actor's table, so it is skipped
+	 by the probes and the writes alike and can never hold a stale value.
+
 	 The ModEnabled check lives here, the single point where morphs are written:
 	 every external call unlocks the script, so the MCM can clear morphs mid-tween
 	 and without this gate the rest of the step would repaint them.}
@@ -760,6 +802,10 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	EndIf
 	String[] morphNames = MainQuest.MorphNames
 	Float[]  maxValues  = MainQuest.MaxValue
+	Int[] bodies     = MainQuest.GetMorphBody()
+	Int[] playerOnly = MainQuest.GetMorphPlayerOnly()
+	Int body = MainQuest.BodyOf(who)
+	Bool isPlayer = who == GetPlayerRef()
 
 	; Integer division trap: arousal / 100 would truncate to 0 -- cast first.
 	Float bare = (arousal as Float) / 100.0
@@ -775,13 +821,14 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 		suppressed = MainQuest.GetMorphSuppressed()
 	EndIf
 
-	; Probe slots: the first non-zero max on each factor. A zero-max slot reads 0
-	; for every factor and could never detect a change.
+	; Probe slots: the first non-zero max on each factor, among this actor's own
+	; slots. A zero-max slot reads 0 for every factor and could never detect a
+	; change.
 	Int probeBare = -1
 	Int probeCovered = -1
 	int j = 0
 	While j < 128 && morphNames[j] != ""
-		If maxValues[j] != 0.0
+		If maxValues[j] != 0.0 && bodies[j] == body && (isPlayer || playerOnly[j] == 0)
 			If mixed && suppressed[j] != 0
 				If probeCovered < 0
 					probeCovered = j
@@ -793,7 +840,8 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 		j += 1
 	EndWhile
 	If probeBare < 0 && probeCovered < 0
-		; Empty table, or every max is 0 -- nothing can ever be written.
+		; No slot of this actor's has a non-zero max -- nothing can ever be
+		; written.
 		return
 	EndIf
 	; 1e-6: float32 noise here is ~1e-8, the smallest dialable step ~1e-4.
@@ -815,15 +863,17 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 
 	j = 0
 	while j < 128 && morphNames[j] != ""
-		float factor = bare
-		If mixed && suppressed[j] != 0
-			factor = covered
-		EndIf
-		float Value = maxValues[j] * factor
-		NiOverride.SetBodyMorph(who, morphNames[j], NIO_KEY, Value)
-		If doDebug
-			debug.Notification("Aroused BodyMorphs: setting "+morphNames[j]+" to "+Value)
-			debug.Trace("ABM: setting "+morphNames[j]+" to "+Value)
+		If bodies[j] == body && (isPlayer || playerOnly[j] == 0)
+			float factor = bare
+			If mixed && suppressed[j] != 0
+				factor = covered
+			EndIf
+			float Value = maxValues[j] * factor
+			NiOverride.SetBodyMorph(who, morphNames[j], NIO_KEY, Value)
+			If doDebug
+				debug.Notification("Aroused BodyMorphs: setting "+morphNames[j]+" to "+Value)
+				debug.Trace("ABM: setting "+morphNames[j]+" to "+Value)
+			EndIf
 		EndIf
 		j += 1
 	EndWhile

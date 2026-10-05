@@ -4,12 +4,18 @@
 #include "SKEE.h"
 #include "Settings.h"
 
+#include <cctype>
+
 namespace ABM::MorphApplier
 {
 	namespace
 	{
 		constexpr const char* NIO_KEY = "ArousedBodyMorphs.esp";
 		constexpr const char* AND_PLUGIN = "Advanced Nudity Detection.esp";
+
+		// ABM_Quest.BODY_MAIN / BODY_UBE: the values MorphEntry::body carries.
+		constexpr std::int32_t kBodyMain = 0;
+		constexpr std::int32_t kBodyUbe = 1;
 
 		SKEE::IBodyMorphInterface* g_bodyMorph = nullptr;
 
@@ -84,6 +90,29 @@ namespace ABM::MorphApplier
 				return false;
 			}
 			return !ANDSaysBare(who);
+		}
+
+		// Mirror of ABM_Quest.BodyOf -- keep the two tests identical. UBE ships
+		// its own playable races, every one with "UBE_" in its EditorID
+		// (00UBE_BretonRace, 00UBE_CustomRace01, ...), which makes it the one
+		// body that can be told apart per actor. 3BA and BHUNP both sit on the
+		// vanilla races, so everyone else is on the main table. Matched
+		// case-insensitively, as Papyrus' StringUtil.Find does.
+		std::int32_t BodyOf(RE::Actor* who)
+		{
+			const auto race = who->GetRace();
+			// A game virtual: it can hand back null, not just "".
+			const char* editorID = race ? race->GetFormEditorID() : nullptr;
+			if (!editorID) {
+				return kBodyMain;
+			}
+			const std::string_view id{ editorID };
+			constexpr std::string_view needle = "ube_";
+			const auto hit = std::search(id.begin(), id.end(), needle.begin(), needle.end(),
+				[](char a, char b) {
+					return std::tolower(static_cast<unsigned char>(a)) == b;
+				});
+			return hit != id.end() ? kBodyUbe : kBodyMain;
 		}
 
 		// Filters + arousal read + under-armor scale. No SKEE calls, so safe
@@ -162,6 +191,17 @@ namespace ABM::MorphApplier
 				return mixed && morph.suppressed;
 			};
 
+			// Not every slot is this actor's: the table holds two bodies, and
+			// the swell groups are the player's alone. A slot that fails either
+			// test is NOT written as 0 -- it is simply not part of this actor's
+			// table, so the probes and the writes both skip it and it can never
+			// hold a stale value.
+			const std::int32_t body = BodyOf(who);
+			const bool isPlayer = who->IsPlayerRef();
+			const auto applies = [&](const MorphEntry& morph) {
+				return morph.body == body && (isPlayer || !morph.playerOnly);
+			};
+
 			// Unchanged-value skip: every slot takes one of those two factors,
 			// so ONE PROBE PER FACTOR settles whether anything would change --
 			// a single probe would miss changes confined to the other factor.
@@ -173,7 +213,7 @@ namespace ABM::MorphApplier
 			const MorphEntry* probeBare = nullptr;
 			const MorphEntry* probeCovered = nullptr;
 			for (const auto& morph : cfg->morphs) {
-				if (morph.maxValue == 0.0f) {
+				if (morph.maxValue == 0.0f || !applies(morph)) {
 					continue;
 				}
 				if (suppressed(morph)) {
@@ -185,7 +225,7 @@ namespace ABM::MorphApplier
 				}
 			}
 			if (!probeBare && !probeCovered) {
-				return;  // every max is 0 -- this table can never write anything
+				return;  // no slot of this actor's has a non-zero max -- nothing to write
 			}
 			const auto atTarget = [&](const MorphEntry* probe, float factor) {
 				if (!probe) {
@@ -204,15 +244,20 @@ namespace ABM::MorphApplier
 				return;
 			}
 
+			std::size_t written = 0;
 			for (const auto& morph : cfg->morphs) {
+				if (!applies(morph)) {
+					continue;
+				}
 				const float value = morph.maxValue * (suppressed(morph) ? covered : bare);
 				g_bodyMorph->SetMorph(who, morph.name.c_str(), NIO_KEY, value);
+				++written;
 			}
 			g_bodyMorph->ApplyBodyMorphs(who);
 
 			if (cfg->debugMode) {
-				logger::info("ApplyMorphs: {} arousal={} scale={} ({} morphs)",
-					who->GetDisplayFullName(), arousal, armorScale, cfg->morphs.size());
+				logger::info("ApplyMorphs: {} arousal={} scale={} body={} ({} of {} morphs)",
+					who->GetDisplayFullName(), arousal, armorScale, body, written, cfg->morphs.size());
 			}
 		}
 	}

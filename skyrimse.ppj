@@ -11,6 +11,8 @@
     <Variables>
         <!-- Set the name of your mod: -->
         <Variable Name="ModName" Value="ArousedBodyMorphs" />
+        <!-- Release version: names the zip below. Keep in step with dist\meta.ini -->
+        <Variable Name="ModVersion" Value="1.2.0" />
         <!-- The folder where you store all of your mods -->
         <Variable Name="ModsFolder" Value="C:\Playground\Skyrim\mods" />
         <!-- Optional folder with additional source code for imports -->
@@ -64,7 +66,7 @@
     <!-- The following section is for .zip archive. Enable by setting Zip="true" in the PapyrusProject.
          The zip is the installable mod: everything under dist\ at its root. -->
     <ZipFiles Output=".\Release">
-        <ZipFile Name="@ModName" RootDir=".\dist" Compression="deflate">
+        <ZipFile Name="@ModName-@ModVersion" RootDir=".\dist" Compression="deflate">
             <Include>ArousedBodyMorphs.esp</Include>
             <Include>ReadMe_ArousedBodyMorphs.txt</Include>
             <Include>LICENSE.txt</Include>

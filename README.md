@@ -10,7 +10,11 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 ## Features
 
 - 23 default morphs targeting **CBBE 3BA** slider names, grouped in the MCM by
-  area: Nipples / Areolas / Vagina / Other
+  area: Nipples / Areolas / Vagina / Breasts / Butt / Other
+- **UBE 2.0 built in, per actor**: a UBE race is recognised on its own and
+  takes a second, UBE-named table, so UBE and 3BA characters can share a game
+  and a slider name both bodies have (`NippleLength`) is tuned per body
+- Optional breast / butt swell for the **player only** (off until dialled in)
 - Intensity presets (Minimal / Natural / Noticeable / Exaggerated)
 - Master on/off switch that fully clears the mod's morphs when disabled
 - Player poll for mid-scene responsiveness (SLA only broadcasts every ~120 s)
@@ -21,10 +25,10 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 - Actor filters (males / dead / creatures)
 - JSON import/export of settings and custom morph tables — imported morphs are
   auto-grouped by name
-- Body-agnostic: any BodySlide-built body works via a custom morph table.
-  Ready-made **UBE 2.0** and **BHUNP** patches live in [patches/](patches/) —
-  install one as a separate mod after ABM and hit MCM → Import (sliders a body
-  doesn't define are silent no-ops, so mixed-body load orders can merge tables)
+- Body-agnostic: any BodySlide-built body works via a custom morph table. A
+  ready-made **BHUNP** patch lives in [patches/](patches/): install it as a
+  separate mod after ABM and hit MCM > Import. It replaces the main table only
+  (3BA and BHUNP sit on the same races, so they share it) and leaves UBE's alone
 - Debug lesser power that dumps an actor's morph state to the Papyrus log
 - **Optional native SKSE layer** ([native/](native/)): event-driven updates via
   OSL Aroused's per-actor arousal events or SLA NG's C API, with all morph
@@ -49,7 +53,7 @@ dist/                 The installable mod (MO2-ready): ESP, scripts, JSON preset
   SKSE/...            Intensity presets + sample morph.json
 patches/              Data-only body patches, each zipped separately (morph
                       table + presets renamed to that body's sliders; no
-                      plugin, no scripts): UBE/ (UBE 2.0), BHUNP/
+                      plugin, no scripts): BHUNP/. UBE 2.0 is built in
 skyrimse.ppj          Papyrus project: compiles dist/source → dist/scripts and
                       zips dist/ into Release/ArousedBodyMorphs.zip
 native/               Optional SKSE DLL (xmake + CommonLibSSE-NG submodule);

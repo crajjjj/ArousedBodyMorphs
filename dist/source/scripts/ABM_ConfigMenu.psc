@@ -28,6 +28,11 @@ String[] _intensityPresetNames
 
 int[] oidMaxValue
 
+; Which body's table the Morphs page is showing: 0 main, 1 UBE (the values of
+; ABM_Quest.MorphBody). The page holds one table at a time; State_BodyTable
+; flips it. Display state only -- it selects nothing in the mod itself.
+int bodyShown = 0
+
 string version
 
 ; Set when DebugMode changes in this menu (the toggle, or an import that flips
@@ -38,8 +43,9 @@ bool toggleDebugSpell = false
 
 String Property ConfigFile = "ArousedBodyMorphs/config.json" Auto hidden
 String Property MorphFile = "ArousedBodyMorphs/morph.json" Auto hidden
-; MCM-side copy of the morph count, synced from MainQuest.MorphCount() on every
-; menu open / morphs-page draw so the render/handler loops match the live table.
+; MCM-side copy of the morph count -- every slot, both bodies' tables -- synced
+; from MainQuest.MorphCount() on every menu open / morphs-page draw so the
+; render/handler loops match the live table.
 int Property MorphsShown = 23 Auto hidden
 
 import JsonUtil
@@ -49,7 +55,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10103
+	return 10200
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -291,24 +297,22 @@ Function DrawMorphsPage()
 	MorphsShown = MainQuest.MorphCount()
 	SetCursorFillMode(TOP_TO_BOTTOM)
 
-	;Left side
-	SetCursorPosition(0)
-	AddHeaderOption("Morphs (" + MorphsShown + ")")
-	AddTextOption("$ABM_Note_Inverted1", "", OPTION_FLAG_DISABLED)
-	AddTextOption("$ABM_Note_Inverted2", "", OPTION_FLAG_DISABLED)
-
-	; Display order: grouped by area, table order preserved within a group.
-	; order[d] maps display position -> table index, so the handlers keep
-	; indexing oidMaxValue by table index.
+	; Display order: the slots of the ONE table being shown (see bodyShown),
+	; grouped by area, table order preserved within a group. order[d] maps
+	; display position -> table index, so the handlers keep indexing
+	; oidMaxValue by table index; a slot of the other table is never drawn and
+	; keeps the -1 that ClearOptionIDs gave it.
+	int[] bodies = MainQuest.GetMorphBody()
+	int groupCount = MainQuest.GroupCount
 	int[] order = new int[128]
 	int total = 0
 	int headers = 0
 	int g = 0
-	while g < 4
+	while g < groupCount
 		bool groupHasAny = false
 		int i = 0
 		while i < MorphsShown
-			if MainQuest.GroupForMorph(MainQuest.MorphNames[i]) == g
+			if bodies[i] == bodyShown && MainQuest.GroupForMorph(MainQuest.MorphNames[i]) == g
 				order[total] = i
 				total += 1
 				groupHasAny = true
@@ -321,10 +325,23 @@ Function DrawMorphsPage()
 		g += 1
 	endwhile
 
+	;Left side
+	SetCursorPosition(0)
+	AddHeaderOption("Morphs (" + total + ")")
+	; Never disabled: it only changes which table this page shows.
+	AddTextOptionST("State_BodyTable", "$ABM_Opt_BodyTable", BodyTableLabel(), 0)
+	; Rows above the sliders: the header and the switcher, plus the NippleSize
+	; note on the main table only -- the slider it warns about is 3BA's.
+	int rows = 2
+	if bodyShown == 0
+		AddTextOption("$ABM_Note_Inverted1", "", OPTION_FLAG_DISABLED)
+		AddTextOption("$ABM_Note_Inverted2", "", OPTION_FLAG_DISABLED)
+		rows = 4
+	endif
+
 	; SkyUI renders ~26 rows per column without scrolling, so the full set must
 	; break at the midpoint. The break can land mid-group; headers don't repeat.
-	int split = (total + headers + 3 + 1) / 2
-	int rows = 3
+	int split = (total + headers + rows + 1) / 2
 	int column = 0
 	int lastGroup = -1
 	int d = 0
@@ -350,6 +367,34 @@ Function DrawMorphsPage()
 		d += 1
 	endwhile
 EndFunction
+
+String Function BodyTableLabel()
+	{The switcher's value: the table the Morphs page is showing.}
+	If bodyShown == 1
+		Return "$ABM_Val_BodyUBE"
+	EndIf
+	Return "$ABM_Val_BodyMain"
+EndFunction
+
+state State_BodyTable
+	event OnHighlightST()
+		SetInfoText("$ABM_Info_BodyTable")
+	endevent
+	event OnSelectST()
+		; Two tables, so the row is a flip. Nothing is applied: the page just
+		; redraws with the other body's sliders.
+		If bodyShown == 0
+			bodyShown = 1
+		Else
+			bodyShown = 0
+		EndIf
+		ForcePageReset()
+	endevent
+	event OnDefaultST()
+		bodyShown = 0
+		ForcePageReset()
+	endevent
+endstate
 
 state State_CheckPlayer
 	event OnHighlightST()
@@ -660,7 +705,13 @@ Event OnOptionHighlight(Int option)
 		int i = 0
 		while i < MorphsShown
 			If option == oidMaxValue[i]
-				SetInfoText("$ABM_Info_MorphSlider")
+				; The swell groups get their own line: they are player-only and
+				; off until dialled in, which the plain slider text doesn't say.
+				If MainQuest.IsSwellGroup(MainQuest.GroupForMorph(MainQuest.MorphNames[i]))
+					SetInfoText("$ABM_Info_SwellSlider")
+				Else
+					SetInfoText("$ABM_Info_MorphSlider")
+				EndIf
 				return
 			Endif
 			i += 1
@@ -708,31 +759,56 @@ Bool Function ImportUserSettings()
 	; Sliders
 	; data/SKSE/Plugins/StorageUtilData/ArousedBodyMorphs/morph.json
 	Load(MorphFile)
-	int it = StringListCount(MorphFile, "morphs")
-	if it > 0
-		; Only overwrite the morph table if the file actually contains entries;
-		; otherwise the defaults set by ABM_Quest.OnInit() are preserved on first install.
-		; Realloc BOTH arrays together so MaxValue can't retain stale entries past the new count.
-		MainQuest.MorphNames = new String[128]
-		MainQuest.MaxValue   = new Float[128]
-		int i = 0
+	int mainListed = StringListCount(MorphFile, "morphs")
+	int ubeListed  = StringListCount(MorphFile, "morphs_ube")
+	if mainListed > 0 || ubeListed > 0
+		; Only touch the morph table if the file actually lists entries; otherwise
+		; the defaults set by ABM_Quest.OnInit() are preserved on first install.
+		; The table is built aside and swapped in whole, so no array can retain
+		; stale entries past the new count.
+		String[] names  = new String[128]
+		Float[]  values = new Float[128]
+		Int[]    bodies = new Int[128]
 		int in = 0
-		while i < it && i < 128
-			string MorphName = StringListGet(MorphFile, "morphs", i)
-			if MorphName != ""
-				MainQuest.MorphNames[in] = MorphName
-				; PapyrusUtil lowercases the lookup key (see ApplyIntensityPreset), so a
-				; hand-edited morph.json must keep its value keys lowercase; the list
-				; entry above keeps the exact slider name.
-				MainQuest.MaxValue[in] = GetStringValue(MorphFile, MorphName, "0") as float
-				in += 1
+		; Files written by 1.2.0+ say so; anything older has ONE list for one body.
+		int tableVersion = MainQuest.CurrentTableVersion
+		if (GetStringValue(MorphFile, "tableversion", "1") as int) >= 2
+			; Per-body file: a table the file lists is replaced by it, a table it
+			; doesn't list is kept as it stands. That is what lets a body patch
+			; ship the main table alone without wiping the UBE one.
+			if mainListed > 0
+				in = ReadMorphList("morphs", 0, names, values, bodies, in)
+			else
+				in = KeepMorphTable(0, names, values, bodies, in)
 			endif
-			i += 1
-		EndWhile
-		MorphsShown = in
-		; Rebuild MaxDefault against the imported names NOW, not on the next game
-		; load -- otherwise the R-key slider default serves values from the old table.
+			if ubeListed > 0
+				in = ReadMorphList("morphs_ube", 1, names, values, bodies, in)
+			else
+				in = KeepMorphTable(1, names, values, bodies, in)
+			endif
+		elseif OldListIsUbe(mainListed)
+			; The old UBE body patch's table: all of it is UBE's, and the main
+			; table has nothing to do with this file.
+			in = KeepMorphTable(0, names, values, bodies, in)
+			in = ReadMorphList("morphs", 1, names, values, bodies, in)
+		else
+			; Any other old file. Load it untagged and mark the table as old, so
+			; ResetDefaults below runs it through the upgrade an old save gets
+			; (ABM_Quest.EnsureBodyTables), which sorts a merged list by name.
+			in = ReadMorphList("morphs", 0, names, values, bodies, in)
+			tableVersion = 1
+		endif
+		MainQuest.MorphNames   = names
+		MainQuest.MaxValue     = values
+		MainQuest.MorphBody    = bodies
+		MainQuest.TableVersion = tableVersion
+		; The swell entries are always on the page, whatever the file listed.
+		MainQuest.EnsureSwellSlots()
+		; Rebuild MaxDefault and the per-slot flags against the imported names NOW,
+		; not on the next game load -- otherwise the R-key slider default serves
+		; values from the old table.
 		MainQuest.ResetDefaults()
+		MorphsShown = MainQuest.MorphCount()
 	endif
 	UnLoad(MorphFile, false, false)
 
@@ -747,6 +823,82 @@ Bool Function ImportUserSettings()
 		MainQuest.PlayerAlias.RestartPolling()
 	EndIf
 	return TRUE
+EndFunction
+
+Int Function ReadMorphList(String listKey, Int body, String[] names, Float[] values, Int[] bodies, Int n)
+	{Append one list of morph.json to the table being built, tagged with its
+	 body. Returns the new count. The file must be loaded.
+
+	 PapyrusUtil lowercases the lookup key (see ApplyIntensityPreset), so a
+	 hand-edited morph.json must keep its value keys lowercase; the list entry
+	 keeps the exact slider name. A UBE slot reads its prefixed key first
+	 (ABM_Quest.MorphKey) and falls back to the plain one, which is all a file
+	 from before 1.2.0 has.}
+	int listed = StringListCount(MorphFile, listKey)
+	int i = 0
+	while i < listed && n < 128
+		string morphName = StringListGet(MorphFile, listKey, i)
+		if morphName != ""
+			string value = ""
+			if body == 1
+				value = GetStringValue(MorphFile, "ube_" + morphName, "")
+			endif
+			if value == ""
+				value = GetStringValue(MorphFile, morphName, "0")
+			endif
+			names[n]  = morphName
+			values[n] = value as float
+			bodies[n] = body
+			n += 1
+		endif
+		i += 1
+	endwhile
+	return n
+EndFunction
+
+Int Function KeepMorphTable(Int body, String[] names, Float[] values, Int[] bodies, Int n)
+	{Carry one body's CURRENT slots over into the table being built, for an
+	 import whose file doesn't list that body. Returns the new count.}
+	String[] oldNames  = MainQuest.MorphNames
+	Float[]  oldValues = MainQuest.MaxValue
+	Int[]    oldBodies = MainQuest.GetMorphBody()
+	if !oldNames
+		return n
+	endif
+	int i = 0
+	while i < 128 && oldNames[i] != "" && n < 128
+		if oldBodies[i] == body
+			names[n]  = oldNames[i]
+			values[n] = oldValues[i]
+			bodies[n] = body
+			n += 1
+		endif
+		i += 1
+	endwhile
+	return n
+EndFunction
+
+Bool Function OldListIsUbe(Int listed)
+	{True when a pre-1.2.0 morph.json lists nothing but UBE slider names: the
+	 old UBE body patch's table, imported with that patch still installed.
+	 Recognised here, rather than left to the general upgrade, so that importing
+	 it replaces the UBE table and leaves the main one alone. Same name test as
+	 ABM_Quest.EnsureBodyTables. The file must be loaded.}
+	String[] ubeSet = MainQuest.UbeMorphSet()
+	bool anyUbeOnly = false
+	int i = 0
+	while i < listed
+		string morphName = StringListGet(MorphFile, "morphs", i)
+		if morphName != ""
+			if MainQuest.IsUbeOnlyName(morphName, ubeSet)
+				anyUbeOnly = true
+			elseif !MainQuest.NameInSet(ubeSet, morphName)
+				return false
+			endif
+		endif
+		i += 1
+	endwhile
+	return anyUbeOnly
 EndFunction
 
 String[] Function GetIntensityPresetNames()
@@ -780,8 +932,15 @@ Function ApplyIntensityPreset(String presetName)
 	int i = 0
 	int applied = 0
 	String[] morphNames = MainQuest.MorphNames
+	Int[] bodies = MainQuest.GetMorphBody()
 	while i < 128 && morphNames[i] != ""
-		String value = GetStringValue(path, morphNames[i], "")
+		; A UBE slot has its own prefixed key (ABM_Quest.MorphKey), since one
+		; name can be in both tables; the plain name is the fallback, which is
+		; how a preset file from before 1.2.0 spells a UBE slider.
+		String value = GetStringValue(path, MainQuest.MorphKey(i), "")
+		If value == "" && bodies[i] == 1
+			value = GetStringValue(path, morphNames[i], "")
+		EndIf
 		If value != ""
 			MainQuest.MaxValue[i] = value as float
 			applied += 1
@@ -810,14 +969,23 @@ Bool Function ExportUserSettings()
 	SetStringValue(ConfigFile, "intensitypreset",    MainQuest.IntensityPreset)
 	SetStringValue(ConfigFile, "suppressunderarmor", (MainQuest.SuppressUnderArmor as int) as string)
 	SetStringValue(ConfigFile, "underarmorscale",     MainQuest.UnderArmorScale            as string)
-	; Clear any previously-exported list so we don't accumulate duplicates across exports.
+	; Clear the previously-exported lists so we don't accumulate duplicates across exports.
 	StringListClear(MorphFile, "morphs")
-	; Sliders
+	StringListClear(MorphFile, "morphs_ube")
+	; Marks the file as per-body, which is what makes Import read it as two
+	; tables instead of running it through the old-file upgrade.
+	SetStringValue(MorphFile, "tableversion", MainQuest.CurrentTableVersion as string)
+	; Sliders: one list per body, and one value key per slot (ABM_Quest.MorphKey).
+	Int[] bodies = MainQuest.GetMorphBody()
 	int i = 0
 	while i < MorphsShown
 		if MainQuest.MorphNames[i] != ""
-			StringListAdd(MorphFile, "morphs", (MainQuest.MorphNames[i]), false)
-			SetStringValue(MorphFile, MainQuest.MorphNames[i], (MainQuest.MaxValue[i] As string))
+			String listKey = "morphs"
+			if bodies[i] == 1
+				listKey = "morphs_ube"
+			endif
+			StringListAdd(MorphFile, listKey, (MainQuest.MorphNames[i]), false)
+			SetStringValue(MorphFile, MainQuest.MorphKey(i), (MainQuest.MaxValue[i] As string))
 		endif
 		i += 1
 	EndWhile

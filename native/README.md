@@ -4,9 +4,14 @@ Event-driven replacement for the Papyrus update pipeline. When the DLL is
 installed and a native arousal backend is present, it owns detection, events,
 polling, actor filters, under-armor suppression and the SKEE BodyMorph writes;
 the Papyrus side keeps only the MCM and persisted settings (mirrored in via
-`ABM_Native.PushConfig` / `PushMorphTable`). Without the DLL — or on a legacy
-Papyrus-only SLA fork — the Papyrus pipeline runs unchanged, so the DLL is
-strictly optional.
+`ABM_Native.PushConfig` / `PushMorphTable` / `PushSuppressFlags` /
+`PushMorphScopes`). Without the DLL, or on a legacy Papyrus-only SLA fork, the
+Papyrus pipeline runs unchanged, so the DLL is strictly optional.
+
+The pushed table holds two bodies' slots. `PushMorphScopes` says which body
+each slot is for and which slots are the player's alone, and `MorphApplier`
+writes a slot only to an actor it applies to (`BodyOf`: a race with `UBE_` in
+its EditorID takes the UBE slots, everyone else the main ones).
 
 ## Backends
 

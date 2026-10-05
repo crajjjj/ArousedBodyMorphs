@@ -3,7 +3,8 @@
 Skyrim SE mod by crajjjj (inspired by the ArousedNips family of mods).
 Drives BodyMorph sliders on nipples/areolas/vagina in proportion to an actor's
 SexLab Aroused arousal value (0 = no morph, 100 = full effect, linear in
-between). Dev repo layout: sources and project files at the root, `dist\` is
+between). UBE 2.0 is built in as a second, per-actor table, and an optional
+breast / butt swell applies to the player only. Dev repo layout: sources and project files at the root, `dist\` is
 the installable mod (MO2-ready). GitHub: https://github.com/crajjjj/ArousedBodyMorphs
 
 ## Build
@@ -68,11 +69,12 @@ Event-driven replacement for the Papyrus update pipeline; see
 - **What under-armor suppression covers is DATA, not an option:**
   `suppress.json` (StorageUtilData, beside config/morph.json) holds one
   `"suppress"` string list whose entries are either an exact morph name or an
-  area keyword (nipples / areolas / vagina / other, matched through
-  `GroupForMorph`, which is the one-liner for a body whose sliders aren't
-  listed). Ships as the 21 nipple + areola sliders of 3BA, UBE and BHUNP,
-  deduped - one file for every body, since a name the active table doesn't
-  contain is simply never looked up. Nothing below the chest: the trigger is
+  area keyword (nipples / areolas / vagina / breasts / butt / other, matched
+  through `GroupForMorph`, which is the one-liner for a body whose sliders
+  aren't listed). Ships as the 21 nipple + areola sliders of 3BA, UBE and
+  BHUNP, deduped - one file for every body, since a name the active table
+  doesn't contain is simply never looked up. The breast swell is deliberately
+  NOT listed (user decision, 1.2.0): it stays visible under a top. Nothing below the chest: the trigger is
   a CHEST test, so it says nothing about a vagina slider, which a skimpy
   armor leaves on show anyway. Keep it in step when a body patch adds a chest
   slider; UBE's erection morph is `AreolaErection`, NOT a nipple name, so an
@@ -116,6 +118,45 @@ Event-driven replacement for the Papyrus update pipeline; see
 - CommonLibSSE-NG vendored as submodule at `native\lib\commonlibsse-ng`
   (alandtse fork, `ng` branch, currently v8.0.1).
 
+## Body tables and swell (1.2.0)
+
+One slot array holds TWO bodies' tables, and a slot is not every actor's:
+
+- **`MorphBody[i]` tags each slot** `BODY_MAIN` (0) or `BODY_UBE` (1). It is
+  PRIMARY state, not derived: `NippleLength` sits in the array twice, once per
+  body, so a name cannot say which table it is in. The main table is "the body
+  this game was built for" (CBBE 3BA built in, BHUNP via its patch); 3BA and
+  BHUNP share it because both sit on the vanilla races and nothing tells them
+  apart per actor.
+- **`ABM_Quest.BodyOf(actor)` picks the table**: a race with `UBE_` in its
+  EditorID is UBE, everyone else main. `BodyOf` in `MorphApplier.cpp` is the
+  mirror; keep the two tests identical.
+- **Swell = the Breasts and Butt groups** (`IsSwellGroup`), built-in entries
+  `DoubleMelon` / `BigButt` (main) and `BreastsBigger` / `GluteSize p|n` (UBE),
+  default 0. They are PLAYER-ONLY: `MorphPlayerOnly[]` is derived from the
+  group in `RebuildMorphTables`, like `MorphSuppressed[]`. Not `Butt`: that
+  slider grows on 3BA and shrinks on BHUNP.
+- **A slot that is not an actor's is SKIPPED, never written as 0**, in the
+  probes and the writes alike, in both pipelines. That is what keeps the
+  two-factor probe logic intact (no third "zero" class) and means such a slot
+  can never hold a stale value. Do not turn the skip into a zero write.
+- **Old saves upgrade on the LOAD path**: `TableVersion` (0 before 1.2.0) and
+  `EnsureBodyTables`, called from `ResetDefaults`. NOT from the MCM's
+  `OnVersionUpdate`, which must not reach across to the quest. It retags
+  UBE-only names, treats an all-UBE table (the retired UBE patch) as the UBE
+  table, and appends what is missing. Non-destructive.
+- **JSON keys are per slot**: `ABM_Quest.MorphKey` prefixes a UBE slot with
+  `ube_`. `morph.json` has one list per table (`morphs`, `morphs_ube`) and a
+  `tableversion` key; Import replaces a table the file lists and KEEPS one it
+  does not, which is what lets the BHUNP patch ship the main table alone. A
+  file without `tableversion` is a pre-1.2.0 single list and goes through
+  `EnsureBodyTables`. Presets carry `ube_` keys and no swell keys, so picking
+  one never touches the swell.
+- **A pre-1.2.0 DLL has no per-actor filter**, so `PushConfigToNative` gates on
+  `ABM_Native.SupportsScopes()` (DLL version, packed `major<<24|minor<<16|
+  patch<<4`) and hands an older DLL the main table without the swell groups.
+  `PushMorphScopes` must never be called blind.
+
 ## MCM init weight
 
 SkyUI registers EVERY installed MCM in one pass, so anything slow in
@@ -140,7 +181,7 @@ Ours follows that:
 
 ## Bumping the Version
 
-Four places hold the version — keep in sync:
+Five places hold the version - keep in sync:
 
 1. **`dist\meta.ini`** — `version=`. MO2 reads this; canonical user-facing version.
 2. **`ABM_ConfigMenu.psc`** — `GetVersion()` returns `(M)MmmPP` (10000 = 1.00.00). Recompile to `.pex` after editing.
@@ -148,6 +189,12 @@ Four places hold the version — keep in sync:
 4. **`native\xmake.lua`** - `set_version(...)`, the DLL's own version resource.
    Only matters when the DLL is rebuilt, but it says "keep in step" for a
    reason: it is what `SKSE.GetPluginVersion` reports.
+5. **`skyrimse.ppj`** - the `ModVersion` variable, which names the release
+   zip `ArousedBodyMorphs-<version>.zip`. Release assets carry the version
+   in the file name; the body-patch zip is built by hand from
+   `patches\BHUNP\` (zip root = that folder) and named the same way,
+   `ArousedBodyMorphs-BHUNP-Patch-<version>.zip`. There is no UBE patch any
+   more: UBE is built in since 1.2.0.
 
 The readme carries NO changelog: this is a pre-release mod, so per-version
 history is noise. Release notes live on the GitHub release instead.
@@ -172,11 +219,11 @@ native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 
 | Script | Role |
 |--------|------|
-| `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, area-group helpers (`GroupForMorph` / `GroupName` / `GroupKeyword`) and the resolved under-armor set (`RebuildMorphTables` / `MorphSuppressed` / `UnderArmorActive`). `OnInit()` runs first-time setup. |
+| `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, the per-slot body tags and the table an actor takes (`MorphBody` / `BodyOf` / `EnsureBodyTables`), area-group helpers (`GroupForMorph` / `GroupName` / `GroupKeyword` / `IsSwellGroup`) and the resolved per-slot flags (`RebuildMorphTables` / `MorphSuppressed` / `MorphPlayerOnly` / `UnderArmorActive`). `OnInit()` runs first-time setup. |
 | `ABM_PlayerAlias` | `ReferenceAlias` on the player. Detects NiOverride/SKEE, identifies the SLA flavor, runs `UpdateActor()` to push BodyMorph values, owns the player poll, under-armor suppression and the reveal tween. NIO key is `"ArousedBodyMorphs.esp"`. |
-| `ABM_ConfigMenu` | SkyUI MCM (two pages: General / Morphs). Morphs page groups sliders by area (Nipples / Areolas / Vagina / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
+| `ABM_ConfigMenu` | SkyUI MCM (two pages: General / Morphs). Morphs page shows ONE body's table at a time (`State_BodyTable` flips `bodyShown`) and groups its sliders by area (Nipples / Areolas / Vagina / Breasts / Butt / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
 | `ABM_DebugSpellEffect` | Lesser-power magic effect. Dumps actor base + morph values to the Papyrus log, forces `UpdateActor()`, dumps again. |
-| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled` gate + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`, `PushSuppressFlags`). No form binding — not in the ESP. |
+| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled` and `SupportsScopes` gates + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`, `PushSuppressFlags`, `PushMorphScopes`). No form binding, so it is not in the ESP. |
 
 ### ESP records (all defined by this plugin, ESL range)
 
