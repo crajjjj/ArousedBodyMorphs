@@ -3,8 +3,8 @@
 Skyrim SE mod by crajjjj (inspired by the ArousedNips family of mods).
 Drives BodyMorph sliders on nipples/areolas/vagina in proportion to an actor's
 SexLab Aroused arousal value (0 = no morph, 100 = full effect, linear in
-between). UBE 2.0 is built in as a second, per-actor table, and an optional
-breast / butt swell applies to the player only. Dev repo layout: sources and project files at the root, `dist\` is
+between). UBE 2.0 is built in as a second, per-actor table, and each table
+carries optional breast / butt sliders (default 0). Dev repo layout: sources and project files at the root, `dist\` is
 the installable mod (MO2-ready). GitHub: https://github.com/crajjjj/ArousedBodyMorphs
 
 ## Build
@@ -118,7 +118,7 @@ Event-driven replacement for the Papyrus update pipeline; see
 - CommonLibSSE-NG vendored as submodule at `native\lib\commonlibsse-ng`
   (alandtse fork, `ng` branch, currently v8.0.1).
 
-## Body tables and swell (1.2.0)
+## Body tables and swell (1.2.x)
 
 One slot array holds TWO bodies' tables, and a slot is not every actor's:
 
@@ -133,9 +133,15 @@ One slot array holds TWO bodies' tables, and a slot is not every actor's:
   mirror; keep the two tests identical.
 - **Swell = the Breasts and Butt groups** (`IsSwellGroup`), built-in entries
   `DoubleMelon` / `BigButt` (main) and `BreastsBigger` / `GluteSize p|n` (UBE),
-  default 0. They are PLAYER-ONLY: `MorphPlayerOnly[]` is derived from the
-  group in `RebuildMorphTables`, like `MorphSuppressed[]`. Not `Butt`: that
-  slider grows on 3BA and shrinks on BHUNP.
+  default 0. They are ORDINARY morphs: player and NPCs alike. 1.2.0 made them
+  player-only, which was a leftover from a dropped SLIF NG design (there the
+  rule kept NPCs out of SLIF NG's ledger; inside ABM it bought nothing) and
+  was removed in 1.2.1. `IsSwellGroup` now only picks the MCM help line. Not
+  `Butt`: that slider grows on 3BA and shrinks on BHUNP.
+- **`PushMorphScopes(bodies, playerOnly)` keeps its second parameter**, unused:
+  the native shipped in 1.2.0 with it and Papyrus binds by argument list, so
+  dropping it would break a 1.2.0 script/DLL mix. Scripts pass None, the DLL
+  ignores it.
 - **A slot that is not an actor's is SKIPPED, never written as 0**, in the
   probes and the writes alike, in both pipelines. That is what keeps the
   two-factor probe logic intact (no third "zero" class) and means such a slot
@@ -154,8 +160,8 @@ One slot array holds TWO bodies' tables, and a slot is not every actor's:
   one never touches the swell.
 - **A pre-1.2.0 DLL has no per-actor filter**, so `PushConfigToNative` gates on
   `ABM_Native.SupportsScopes()` (DLL version, packed `major<<24|minor<<16|
-  patch<<4`) and hands an older DLL the main table without the swell groups.
-  `PushMorphScopes` must never be called blind.
+  patch<<4`) and hands an older DLL the main table alone. `PushMorphScopes`
+  must never be called blind.
 
 ## MCM init weight
 
@@ -219,7 +225,7 @@ native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 
 | Script | Role |
 |--------|------|
-| `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, the per-slot body tags and the table an actor takes (`MorphBody` / `BodyOf` / `EnsureBodyTables`), area-group helpers (`GroupForMorph` / `GroupName` / `GroupKeyword` / `IsSwellGroup`) and the resolved per-slot flags (`RebuildMorphTables` / `MorphSuppressed` / `MorphPlayerOnly` / `UnderArmorActive`). `OnInit()` runs first-time setup. |
+| `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, the per-slot body tags and the table an actor takes (`MorphBody` / `BodyOf` / `EnsureBodyTables`), area-group helpers (`GroupForMorph` / `GroupName` / `GroupKeyword` / `IsSwellGroup`) and the resolved under-armor set (`RebuildMorphTables` / `MorphSuppressed` / `UnderArmorActive`). `OnInit()` runs first-time setup. |
 | `ABM_PlayerAlias` | `ReferenceAlias` on the player. Detects NiOverride/SKEE, identifies the SLA flavor, runs `UpdateActor()` to push BodyMorph values, owns the player poll, under-armor suppression and the reveal tween. NIO key is `"ArousedBodyMorphs.esp"`. |
 | `ABM_ConfigMenu` | SkyUI MCM (two pages: General / Morphs). Morphs page shows ONE body's table at a time (`State_BodyTable` flips `bodyShown`) and groups its sliders by area (Nipples / Areolas / Vagina / Breasts / Butt / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
 | `ABM_DebugSpellEffect` | Lesser-power magic effect. Dumps actor base + morph values to the Papyrus log, forces `UpdateActor()`, dumps again. |

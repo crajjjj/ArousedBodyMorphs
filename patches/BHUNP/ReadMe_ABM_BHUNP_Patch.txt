@@ -46,9 +46,10 @@ Notes
   way UBE is: both sit on the vanilla races, so nothing tells them apart.
 - UBE characters are unaffected by this patch. They are recognised by
   race and use the built-in UBE table.
-- DoubleMelon and BigButt are the optional breast / butt swell, for the
-  player only. Both grow with a positive value on BHUNP. Do not swap in
-  Butt: on BHUNP that slider is inverted and shrinks with a positive value.
+- DoubleMelon and BigButt are the optional breast / butt sliders, at 0
+  until you raise them. Both grow with a positive value on BHUNP. Do not
+  swap in Butt: on BHUNP that slider is inverted and shrinks with a
+  positive value.
 
 Under armor
 -----------

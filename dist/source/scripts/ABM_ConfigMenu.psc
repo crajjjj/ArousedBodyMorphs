@@ -55,7 +55,7 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10200
+	return 10201
 endFunction
 
 Event OnVersionUpdate(Int ver)
@@ -705,8 +705,9 @@ Event OnOptionHighlight(Int option)
 		int i = 0
 		while i < MorphsShown
 			If option == oidMaxValue[i]
-				; The swell groups get their own line: they are player-only and
-				; off until dialled in, which the plain slider text doesn't say.
+				; The swell groups get their own line: they are off until dialled
+				; in and not flattened under armor, which the plain slider text
+				; doesn't say.
 				If MainQuest.IsSwellGroup(MainQuest.GroupForMorph(MainQuest.MorphNames[i]))
 					SetInfoText("$ABM_Info_SwellSlider")
 				Else

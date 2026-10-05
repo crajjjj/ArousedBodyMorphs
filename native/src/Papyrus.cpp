@@ -89,16 +89,19 @@ namespace ABM::Papyrus
 			logger::info("Suppression flags pushed from Papyrus ({} entries)", suppressed.size());
 		}
 
-		// Also follows PushMorphTable: which body each slot is for, and which
-		// slots are the player's alone. Scripts older than 1.2.0 never call it,
-		// which leaves every slot on the main table and open to every actor,
-		// i.e. the single-table behaviour those scripts expect.
+		// Also follows PushMorphTable: which body each slot is for. Scripts
+		// older than 1.2.0 never call it, which leaves every slot on the main
+		// table, i.e. the single-table behaviour those scripts expect.
+		//
+		// The second array is IGNORED. 1.2.0 used it to flag the swell groups
+		// player-only; from 1.2.1 on nothing is. It stays in the signature
+		// because the native shipped with it, and Papyrus binds by argument
+		// list: dropping it would break 1.2.0 scripts against this DLL.
 		void PushMorphScopes(RE::StaticFunctionTag*,
-			std::vector<int32_t> bodies, std::vector<int32_t> playerOnly)
+			std::vector<int32_t> bodies, std::vector<int32_t>)
 		{
-			Settings::PushMorphScopes(bodies, playerOnly);
-			logger::info("Morph scopes pushed from Papyrus ({} body tags, {} player-only flags)",
-				bodies.size(), playerOnly.size());
+			Settings::PushMorphScopes(bodies);
+			logger::info("Morph scopes pushed from Papyrus ({} body tags)", bodies.size());
 		}
 	}
 

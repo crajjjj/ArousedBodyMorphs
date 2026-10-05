@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.2.0
+Aroused BodyMorphs 1.2.1
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -20,10 +20,10 @@ area (Nipples / Areolas / Vagina / Breasts / Butt / Other). Any custom morph
 list can be imported via JSON; imported morphs sort themselves into the area
 groups by name.
 
-Optional swell: each table also carries a breast and a butt slider (DoubleMelon
-and BigButt on the main table, BreastsBigger and GluteSize p|n on UBE's). They
-start at 0, so nothing swells until you raise them, and they apply to the
-PLAYER only.
+Breasts and butt: each table also carries a breast and a butt slider
+(DoubleMelon and BigButt on the main table, BreastsBigger and GluteSize p|n on
+UBE's). They start at 0, so nothing swells until you raise them. Otherwise they
+are ordinary morphs and apply to the player and NPCs alike.
 
 A BodySlide-built body (and body-armor) WITH morph data ("Build Morphs" checked)
 is required for anything to be visible in game.
@@ -52,10 +52,11 @@ Features
   both bodies have, such as NippleLength. The separate UBE body patch of
   earlier versions is no longer needed: uninstall it, its imported table is
   taken over as the UBE table on the next load
-- Optional breast / butt swell for the player: the Breasts and Butt groups,
-  off (0) until you raise them, and never applied to NPCs. The swell is not
-  suppressed under armor, so outfits must be built with morphs to follow the
-  shape (add "breasts" to suppress.json to flatten it under a top instead)
+- Breast and butt sliders built in: the Breasts and Butt groups, off (0)
+  until you raise them, applied to the player and NPCs like every other
+  morph. They are not suppressed under armor, so outfits must be built with
+  morphs to follow the shape (add "breasts" to suppress.json to flatten the
+  breast one under a top instead)
 - Intensity presets: Minimal / Natural / Noticeable / Exaggerated
   (install default is Natural). They cover both tables and leave the swell
   sliders alone

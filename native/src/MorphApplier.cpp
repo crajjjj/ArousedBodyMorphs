@@ -191,15 +191,13 @@ namespace ABM::MorphApplier
 				return mixed && morph.suppressed;
 			};
 
-			// Not every slot is this actor's: the table holds two bodies, and
-			// the swell groups are the player's alone. A slot that fails either
-			// test is NOT written as 0 -- it is simply not part of this actor's
-			// table, so the probes and the writes both skip it and it can never
-			// hold a stale value.
+			// Not every slot is this actor's: the table holds two bodies. A slot
+			// of the other body is NOT written as 0 -- it is simply not part of
+			// this actor's table, so the probes and the writes both skip it and
+			// it can never hold a stale value.
 			const std::int32_t body = BodyOf(who);
-			const bool isPlayer = who->IsPlayerRef();
 			const auto applies = [&](const MorphEntry& morph) {
-				return morph.body == body && (isPlayer || !morph.playerOnly);
+				return morph.body == body;
 			};
 
 			// Unchanged-value skip: every slot takes one of those two factors,

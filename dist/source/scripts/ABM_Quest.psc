@@ -72,12 +72,6 @@ int[] Property MorphBody Auto Hidden
 int Property BODY_MAIN = 0 AutoReadOnly Hidden
 int Property BODY_UBE  = 1 AutoReadOnly Hidden
 
-; 1 per slot that applies to the PLAYER only, 0 otherwise: the swell groups
-; (Breasts, Butt -- see IsSwellGroup). Derived from GroupForMorph by
-; RebuildMorphTables, exactly like MorphSuppressed, and pushed to the DLL the
-; same way.
-int[] Property MorphPlayerOnly Auto Hidden
-
 ; Layout version of the table above. 0 on a save from before 1.2.0, which held
 ; one body and no MorphBody; EnsureBodyTables upgrades those once, on load.
 int Property TableVersion = 0 Auto Hidden
@@ -331,7 +325,6 @@ Function RebuildMorphTables()
 	 Called from ResetDefaults (every path that rewrites the table) and from
 	 OnPlayerLoadGame, which is what makes a hand-edited file take effect.}
 	MorphSuppressed = new int[128]
-	MorphPlayerOnly = new int[128]
 	AnyMorphSuppressed = false
 	If !MorphBody
 		; Never None for the writer, whatever state the save is in. All zeros
@@ -363,11 +356,7 @@ Function RebuildMorphTables()
 
 	Int i = 0
 	While i < 128 && MorphNames[i] != ""
-		Int grp = GroupForMorph(MorphNames[i])
-		If IsSwellGroup(grp)
-			MorphPlayerOnly[i] = 1
-		EndIf
-		String area = GroupKeyword(grp)
+		String area = GroupKeyword(GroupForMorph(MorphNames[i]))
 		Int r = 0
 		While r < ruleCount
 			; Papyrus string compare is case-insensitive, so a hand-typed
@@ -399,14 +388,6 @@ Int[] Function GetMorphBody()
 		RebuildMorphTables()
 	EndIf
 	Return MorphBody
-EndFunction
-
-Int[] Function GetMorphPlayerOnly()
-	{The player-only flags, with the same on-demand fallback.}
-	If !MorphPlayerOnly
-		RebuildMorphTables()
-	EndIf
-	Return MorphPlayerOnly
 EndFunction
 
 String[] Function FullMorphSet()
@@ -470,7 +451,7 @@ String[] Function MainSwellSet()
 	 POSITIVE value, on CBBE 3BA and on BHUNP alike (checked against both
 	 bodies' BodySlide data), so one pair serves either install. Not Butt: that
 	 slider grows on 3BA and shrinks on BHUNP. They default to 0, so the swell
-	 is opt-in, and they land in the swell groups, which are player-only.}
+	 is opt-in. Otherwise they are ordinary morphs: player and NPCs alike.}
 	String[] names = new String[2]
 	names[0] = "DoubleMelon"
 	names[1] = "BigButt"
@@ -637,9 +618,9 @@ EndFunction
 int Property GroupCount = 6 AutoReadOnly Hidden
 
 Bool Function IsSwellGroup(Int groupId)
-	{True for Breasts and Butt. A morph in a swell group applies to the PLAYER
-	 only: on an NPC it is simply not part of the table. The built-in swell
-	 entries live here, and so does any imported slider whose name sorts in.}
+	{True for Breasts and Butt, where the built-in swell entries live. Only the
+	 MCM asks: those sliders get their own help line (off until raised, and not
+	 flattened under armor). The writer treats them like any other morph.}
 	Return groupId == 3 || groupId == 4
 EndFunction
 

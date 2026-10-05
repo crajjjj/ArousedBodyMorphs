@@ -12,7 +12,7 @@
         <!-- Set the name of your mod: -->
         <Variable Name="ModName" Value="ArousedBodyMorphs" />
         <!-- Release version: names the zip below. Keep in step with dist\meta.ini -->
-        <Variable Name="ModVersion" Value="1.2.0" />
+        <Variable Name="ModVersion" Value="1.2.1" />
         <!-- The folder where you store all of your mods -->
         <Variable Name="ModsFolder" Value="C:\Playground\Skyrim\mods" />
         <!-- Optional folder with additional source code for imports -->

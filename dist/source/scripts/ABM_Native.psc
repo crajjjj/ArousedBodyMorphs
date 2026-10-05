@@ -18,7 +18,7 @@ EndFunction
 
 Bool Function SupportsScopes() Global
 	{True when the installed DLL is 1.2.0 or newer, i.e. it exports
-	 PushMorphScopes and filters slots per actor. An older DLL writes every slot
+	 PushMorphScopes and filters slots per body. An older DLL writes every slot
 	 it is given to every actor, so it must be handed the main table alone --
 	 see ABM_PlayerAlias.PushConfigToNative. The version is the DLL's own,
 	 packed major<<24 | minor<<16 | patch<<4 (REL::Version::pack).}
@@ -61,10 +61,12 @@ Function PushSuppressFlags(Int[] suppressed) Global Native
  all -- i.e. a silently dead mod.}
 
 Function PushMorphScopes(Int[] bodies, Int[] playerOnly) Global Native
-{Say which actors each slot of the pushed table is for, parallel to
- PushMorphTable's arrays: bodies = ABM_Quest.MorphBody (0 main table, 1 UBE),
- playerOnly = ABM_Quest.MorphPlayerOnly (1 = the player alone). The DLL then
- writes a slot only to an actor of that body, and a player-only slot only to
- the player.
+{Say which body each slot of the pushed table is for, parallel to
+ PushMorphTable's arrays: bodies = ABM_Quest.MorphBody (0 main table, 1 UBE).
+ The DLL then writes a slot only to an actor of that body.
+
+ playerOnly is unused: 1.2.0 flagged the swell groups with it, and from 1.2.1
+ on nothing is player-only. Pass None. The parameter stays because the native
+ shipped with it, and a changed signature would not bind to a 1.2.0 DLL.
 
  Exported from 1.2.0 on: gate on SupportsScopes(), never call it blind.}

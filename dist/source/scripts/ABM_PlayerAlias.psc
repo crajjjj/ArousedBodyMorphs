@@ -106,27 +106,28 @@ Function PushConfigToNative()
 	; so everything above has already landed if this call finds no native to
 	; bind to.
 	ABM_Native.PushSuppressFlags(MainQuest.GetMorphSuppressed())
-	ABM_Native.PushMorphScopes(MainQuest.GetMorphBody(), MainQuest.GetMorphPlayerOnly())
+	; The second array was 1.2.0's player-only flags. Nothing is player-only any
+	; more, so it goes over empty (None); the parameter stays because the native
+	; shipped with it and a changed signature would not bind to that DLL.
+	Int[] noPlayerOnly
+	ABM_Native.PushMorphScopes(MainQuest.GetMorphBody(), noPlayerOnly)
 EndFunction
 
 Function PushMainTableToNative()
-	{The table as a pre-1.2.0 DLL understands it: one body, no player-only
-	 slots. That DLL has no per-actor filter, so handing it the full table would
-	 put the UBE values of shared names on everyone and the swell on every NPC.
-	 It gets the main table without the swell groups instead, which is exactly
-	 the table it shipped with.}
+	{The table as a pre-1.2.0 DLL understands it: one body. That DLL has no
+	 per-actor filter, so handing it the full table would put the UBE values of
+	 shared names on everyone. It gets the main table alone instead.}
 	String[] allNames  = MainQuest.MorphNames
 	Float[]  allValues = MainQuest.MaxValue
 	Int[] allFlags   = MainQuest.GetMorphSuppressed()
 	Int[] bodies     = MainQuest.GetMorphBody()
-	Int[] playerOnly = MainQuest.GetMorphPlayerOnly()
 	String[] names = new String[128]
 	Float[] values = new Float[128]
 	Int[] flags    = new Int[128]
 	Int n = 0
 	Int i = 0
 	While i < 128 && allNames[i] != ""
-		If bodies[i] == 0 && playerOnly[i] == 0
+		If bodies[i] == 0
 			names[n]  = allNames[i]
 			values[n] = allValues[i]
 			flags[n]  = allFlags[i]
@@ -788,11 +789,11 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	 change, a save load, or an external clear, because the target moves with the
 	 settings. DO NOT replace it with a remembered value.
 
-	 Not every slot is this actor's. The table holds two bodies (a UBE race takes
-	 the UBE slots, everyone else the main ones -- MainQuest.BodyOf) and the
-	 swell groups are the player's alone. A slot that fails either test is NOT
-	 written as 0: it is simply not part of this actor's table, so it is skipped
-	 by the probes and the writes alike and can never hold a stale value.
+	 Not every slot is this actor's. The table holds two bodies: a UBE race takes
+	 the UBE slots, everyone else the main ones (MainQuest.BodyOf). A slot of
+	 the other body is NOT written as 0: it is simply not part of this actor's
+	 table, so it is skipped by the probes and the writes alike and can never
+	 hold a stale value.
 
 	 The ModEnabled check lives here, the single point where morphs are written:
 	 every external call unlocks the script, so the MCM can clear morphs mid-tween
@@ -802,10 +803,8 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	EndIf
 	String[] morphNames = MainQuest.MorphNames
 	Float[]  maxValues  = MainQuest.MaxValue
-	Int[] bodies     = MainQuest.GetMorphBody()
-	Int[] playerOnly = MainQuest.GetMorphPlayerOnly()
+	Int[] bodies = MainQuest.GetMorphBody()
 	Int body = MainQuest.BodyOf(who)
-	Bool isPlayer = who == GetPlayerRef()
 
 	; Integer division trap: arousal / 100 would truncate to 0 -- cast first.
 	Float bare = (arousal as Float) / 100.0
@@ -828,7 +827,7 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	Int probeCovered = -1
 	int j = 0
 	While j < 128 && morphNames[j] != ""
-		If maxValues[j] != 0.0 && bodies[j] == body && (isPlayer || playerOnly[j] == 0)
+		If maxValues[j] != 0.0 && bodies[j] == body
 			If mixed && suppressed[j] != 0
 				If probeCovered < 0
 					probeCovered = j
@@ -863,7 +862,7 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 
 	j = 0
 	while j < 128 && morphNames[j] != ""
-		If bodies[j] == body && (isPlayer || playerOnly[j] == 0)
+		If bodies[j] == body
 			float factor = bare
 			If mixed && suppressed[j] != 0
 				factor = covered

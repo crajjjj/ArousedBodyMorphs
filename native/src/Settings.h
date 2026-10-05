@@ -19,9 +19,6 @@ namespace ABM
 		// 1 = UBE. The table holds both, so a name can appear twice with a
 		// value per body, and an actor only ever takes the slots of its own.
 		std::int32_t body = 0;
-		// True for the swell groups (ABM_Quest.MorphPlayerOnly): the slot is
-		// the player's alone and is not part of any NPC's table.
-		bool playerOnly = false;
 	};
 
 	struct Config
@@ -68,8 +65,8 @@ namespace ABM
 		}
 
 		// Replace the morph table, keeping the current options. Every entry
-		// starts unsuppressed, on the main table and open to every actor;
-		// PushSuppressFlags and PushMorphScopes follow immediately.
+		// starts unsuppressed and on the main table; PushSuppressFlags and
+		// PushMorphScopes follow immediately.
 		static void PushMorphTable(std::vector<MorphEntry> morphs)
 		{
 			std::lock_guard lock(Mutex());
@@ -92,17 +89,15 @@ namespace ABM
 			Current() = std::move(next);
 		}
 
-		// Apply one body tag and one player-only flag per slot of the current
-		// table. A slot past either array keeps the open default (main table,
-		// every actor), so a length mismatch never hides a morph.
-		static void PushMorphScopes(const std::vector<std::int32_t>& bodies,
-			const std::vector<std::int32_t>& playerOnly)
+		// Apply one body tag per slot of the current table. A slot past the
+		// array stays on the main table, so a length mismatch never hides a
+		// morph from the bodies that had it before.
+		static void PushMorphScopes(const std::vector<std::int32_t>& bodies)
 		{
 			std::lock_guard lock(Mutex());
 			auto next = std::make_shared<Config>(*Current());
 			for (size_t i = 0; i < next->morphs.size(); ++i) {
 				next->morphs[i].body = i < bodies.size() ? bodies[i] : 0;
-				next->morphs[i].playerOnly = i < playerOnly.size() && playerOnly[i] != 0;
 			}
 			Current() = std::move(next);
 		}

@@ -9,9 +9,10 @@ the Papyrus side keeps only the MCM and persisted settings (mirrored in via
 Papyrus pipeline runs unchanged, so the DLL is strictly optional.
 
 The pushed table holds two bodies' slots. `PushMorphScopes` says which body
-each slot is for and which slots are the player's alone, and `MorphApplier`
-writes a slot only to an actor it applies to (`BodyOf`: a race with `UBE_` in
-its EditorID takes the UBE slots, everyone else the main ones).
+each slot is for, and `MorphApplier` writes a slot only to an actor of that
+body (`BodyOf`: a race with `UBE_` in its EditorID takes the UBE slots,
+everyone else the main ones). Its second array is unused and kept only so the
+signature released in 1.2.0 still binds.
 
 ## Backends
 

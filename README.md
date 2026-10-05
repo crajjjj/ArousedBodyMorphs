@@ -14,7 +14,7 @@ Standalone mod: ESL-flagged plugin, `ABM_*` Papyrus scripts, area-grouped MCM.
 - **UBE 2.0 built in, per actor**: a UBE race is recognised on its own and
   takes a second, UBE-named table, so UBE and 3BA characters can share a game
   and a slider name both bodies have (`NippleLength`) is tuned per body
-- Optional breast / butt swell for the **player only** (off until dialled in)
+- Breast / butt sliders built in to both tables (off until dialled in)
 - Intensity presets (Minimal / Natural / Noticeable / Exaggerated)
 - Master on/off switch that fully clears the mod's morphs when disabled
 - Player poll for mid-scene responsiveness (SLA only broadcasts every ~120 s)
