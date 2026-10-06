@@ -64,15 +64,26 @@ namespace ABM
 			Current() = std::move(next);
 		}
 
-		// Replace the morph table, keeping the current options. Every entry
-		// starts unsuppressed and on the main table; PushSuppressFlags and
-		// PushMorphScopes follow immediately.
+		// Replace the morph table, keeping the current options. A slot whose
+		// name did not change keeps its suppress flag and body tag until
+		// PushSuppressFlags and PushMorphScopes arrive, which is at once: those
+		// are three separate swaps, and an update landing between them must
+		// not find a re-pushed table with every slot unsuppressed and on the
+		// main table. A new or renamed slot starts unsuppressed, main table.
 		static void PushMorphTable(std::vector<MorphEntry> morphs)
 		{
 			std::lock_guard lock(Mutex());
 			auto next = std::make_shared<Config>(*Current());
+			const auto& old = Current()->morphs;
+			for (size_t i = 0; i < morphs.size() && i < old.size(); ++i) {
+				if (morphs[i].name == old[i].name) {
+					morphs[i].suppressed = old[i].suppressed;
+					morphs[i].body = old[i].body;
+				}
+			}
 			next->morphs = std::move(morphs);
-			next->anySuppressed = false;
+			next->anySuppressed = std::any_of(next->morphs.begin(), next->morphs.end(),
+				[](const MorphEntry& morph) { return morph.suppressed; });
 			Current() = std::move(next);
 		}
 

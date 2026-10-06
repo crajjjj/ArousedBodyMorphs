@@ -25,6 +25,15 @@ Bool Function SupportsScopes() Global
 	Return SKSE.GetPluginVersion("ArousedBodyMorphs") >= 0x01020000
 EndFunction
 
+Bool Function ChecksEverySlot() Global
+	{True when the installed DLL is 1.2.2 or newer, whose unchanged-value skip
+	 compares every slot of the actor's table and so notices an edited slider by
+	 itself. An older DLL reads one probe per factor and does not: a forced
+	 refresh has to clear the actor's morphs first. See
+	 ABM_PlayerAlias.UpdateActor. Packed like SupportsScopes (patch << 4).}
+	Return SKSE.GetPluginVersion("ArousedBodyMorphs") >= 0x01020020
+EndFunction
+
 Bool Function IsActive() Global Native
 {True when a native arousal backend was detected AND SKEE's BodyMorph
  interface was acquired -- i.e. the DLL owns the update pipeline.}

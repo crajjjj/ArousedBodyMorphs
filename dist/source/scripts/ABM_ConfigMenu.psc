@@ -28,9 +28,9 @@ String[] _intensityPresetNames
 
 int[] oidMaxValue
 
-; Which body's table the Morphs page is showing: 0 main, 1 UBE (the values of
-; ABM_Quest.MorphBody). The page holds one table at a time; State_BodyTable
-; flips it. Display state only -- it selects nothing in the mod itself.
+; Which body's table the page being drawn holds: 0 main, 1 UBE (the values of
+; ABM_Quest.MorphBody). Each table has its own page, and OnPageReset sets this
+; from the page. Display state only -- it selects nothing in the mod itself.
 int bodyShown = 0
 
 string version
@@ -40,6 +40,10 @@ string version
 ; own removal instead, since it must not leave the menu and the Powers list
 ; disagreeing even briefly.
 bool toggleDebugSpell = false
+
+; Set when a morph VALUE changes in this menu (a slider, a preset, Import,
+; Reset); OnConfigClose then forces the write. See there.
+bool morphsDirty = false
 
 String Property ConfigFile = "ArousedBodyMorphs/config.json" Auto hidden
 String Property MorphFile = "ArousedBodyMorphs/morph.json" Auto hidden
@@ -55,14 +59,21 @@ import MiscUtil
 int function GetVersion()
 	; Packed (M)MmmPP -- 12345 => 1.23.45. Bump alongside meta.ini; SkyUI fires
 	; OnVersionUpdate when a save carries an older number.
-	return 10201
+	return 10202
 endFunction
 
 Event OnVersionUpdate(Int ver)
-	{Fired by SKI_ConfigBase when the saved version is older. Updates the display
-	 string ONLY: this runs during SkyUI's MCM registration with the script lock
-	 contended, and reaching across to the Quest / Alias here froze the game in
-	 the predecessor mod. The poll is re-registered on every load anyway.}
+	{Fired by SKI_ConfigBase when the saved version is older. Updates this
+	 script's OWN state only (the display string and the page list): it runs
+	 during SkyUI's MCM registration with the script lock contended, and reaching
+	 across to the Quest / Alias here froze the game in the predecessor mod. The
+	 poll is re-registered on every load anyway.
+
+	 The page list has to be rebuilt HERE, not just in OnConfigOpen: Pages is a
+	 saved property, and SkyUI draws the first page before it calls OnConfigOpen
+	 (OpenConfig -> SetPage -> OnPageReset), so a save from before 1.2.2 would
+	 index a third page its two-entry array does not have.}
+	SetupPages()
 	int Major = ver/10000
 	int Minor = (ver%10000)/100
 	int Patch = ver%100
@@ -103,9 +114,13 @@ event OnConfigOpen()
 endEvent
 
 Function SetupPages()
-	Pages = new string[2]
+	{One page per body table. Pages is a SAVED property, so a save from before
+	 1.2.2 still holds two entries: OnVersionUpdate rebuilds it on load, and
+	 OnPageReset checks the length as a second line of defence.}
+	Pages = new string[3]
 	Pages[0] = "$ABM_Page_General"
 	Pages[1] = "$ABM_Page_Morphs"
+	Pages[2] = "$ABM_Page_MorphsUBE"
 EndFunction
 
 Function RefreshReqFlag()
@@ -145,11 +160,20 @@ Event OnConfigClose()
 	;
 	; Cost is one refresh per menu close, which is exactly the moment the user is
 	; waiting to see the result. When nothing actually changed, SetActorMorphs'
-	; probe finds the values already applied and skips the writes + mesh rebuild.
-	; NPCs are deliberately not swept here: that is a full cell scan for a change
-	; the user is judging on their own body, and they catch up on the next
-	; heartbeat anyway.
-	MainQuest.PlayerAlias.RefreshPlayer()
+	; probe finds the values already applied and skips the writes + mesh rebuild,
+	; and NPCs are left alone: they catch up on the next heartbeat.
+	;
+	; A changed morph VALUE is the exception (morphsDirty). The probe reads only
+	; the first non-zero slot of each factor, so an edit to any other slider
+	; looks "already applied" and would wait for the actor's arousal to move.
+	; That close forces the write, and takes nearby NPCs along, since they carry
+	; the old table too. A cell scan, but once per editing session.
+	If morphsDirty
+		morphsDirty = false
+		MainQuest.PlayerAlias.RefreshAfterTableEdit()
+	Else
+		MainQuest.PlayerAlias.RefreshPlayer()
+	EndIf
 
 	if toggleDebugSpell
 		Actor pc = MainQuest.PlayerAlias.GetPlayerRef()
@@ -170,7 +194,18 @@ event OnPageReset(string page)
 	;;;;;;;;;;;;;;;;;;;;;;;;;;
 	RefreshReqFlag()
 	ClearOptionIDs()
+	If Pages.Length < 3
+		; SkyUI draws the landing page BEFORE OnConfigOpen, so a stale two-entry
+		; list from an older save can still be here. Indexing its third slot
+		; logs an error and reads as "", which equals the landing page's own
+		; name: the menu then opened on the UBE table instead of General.
+		SetupPages()
+	EndIf
 	If page == Pages[1]
+		bodyShown = 0
+		DrawMorphsPage()
+	ElseIf page == Pages[2]
+		bodyShown = 1
 		DrawMorphsPage()
 	Else
 		; "General", and the no-page-selected state ("") right after opening.
@@ -328,9 +363,9 @@ Function DrawMorphsPage()
 	;Left side
 	SetCursorPosition(0)
 	AddHeaderOption("Morphs (" + total + ")")
-	; Never disabled: it only changes which table this page shows.
+	; Read-only: names the table, and its highlight text says who uses it.
 	AddTextOptionST("State_BodyTable", "$ABM_Opt_BodyTable", BodyTableLabel(), 0)
-	; Rows above the sliders: the header and the switcher, plus the NippleSize
+	; Rows above the sliders: the header and the table row, plus the NippleSize
 	; note on the main table only -- the slider it warns about is 3BA's.
 	int rows = 2
 	if bodyShown == 0
@@ -369,7 +404,7 @@ Function DrawMorphsPage()
 EndFunction
 
 String Function BodyTableLabel()
-	{The switcher's value: the table the Morphs page is showing.}
+	{The table row's value: the table this page holds.}
 	If bodyShown == 1
 		Return "$ABM_Val_BodyUBE"
 	EndIf
@@ -377,22 +412,10 @@ String Function BodyTableLabel()
 EndFunction
 
 state State_BodyTable
+	; A read-only row. Each table has its own page since 1.2.2, so there is
+	; nothing to select here; the highlight text says who uses which table.
 	event OnHighlightST()
 		SetInfoText("$ABM_Info_BodyTable")
-	endevent
-	event OnSelectST()
-		; Two tables, so the row is a flip. Nothing is applied: the page just
-		; redraws with the other body's sliders.
-		If bodyShown == 0
-			bodyShown = 1
-		Else
-			bodyShown = 0
-		EndIf
-		ForcePageReset()
-	endevent
-	event OnDefaultST()
-		bodyShown = 0
-		ForcePageReset()
 	endevent
 endstate
 
@@ -424,6 +447,7 @@ state State_Import
 	endevent
 	event OnSelectST()
 		ImportUserSettings()
+		morphsDirty = true
 		SetTextOptionValueST("$ABM_Val_Loading")
 		ForcePageReset()
 	endevent
@@ -446,6 +470,7 @@ state State_Reset
 	endevent
 	event OnSelectST()
 		MainQuest.ResetAllState()
+		morphsDirty = true
 		; Drop the debug power here, now. ResetAllState forces DebugMode off but
 		; cannot remove the power itself: the quest must never call back into
 		; this menu -- that cross-script contention froze the game in the
@@ -491,6 +516,7 @@ state State_IntensityPreset
 		SetMenuOptionValueST("$ABM_Val_Loading")
 		String preset = names[index]
 		ApplyIntensityPreset(preset)
+		morphsDirty = true
 		MainQuest.IntensityPreset = preset
 		SetMenuOptionValueST(preset)
 		; Redraw so the Morphs page picks up the new MaxValue on its next draw.
@@ -590,6 +616,7 @@ event OnOptionDefault(int option)
 		while i < MorphsShown
 			If option == oidMaxValue[i]
 				MainQuest.MaxValue[i] = MainQuest.MaxDefault[i]
+				morphsDirty = true
 				SetSliderOptionValue(option, MainQuest.MaxValue[i], "{2}")
 				return
 			Endif
@@ -672,6 +699,7 @@ Event OnOptionSliderAccept(Int option, Float value)
 	while i < MorphsShown
 		If option == oidMaxValue[i]
 			MainQuest.MaxValue[i] = value
+			morphsDirty = true
 			SetSliderOptionValue(option, MainQuest.MaxValue[i], "{2}")
 			return
 		Endif
@@ -787,17 +815,29 @@ Bool Function ImportUserSettings()
 			else
 				in = KeepMorphTable(1, names, values, bodies, in)
 			endif
-		elseif OldListIsUbe(mainListed)
-			; The old UBE body patch's table: all of it is UBE's, and the main
-			; table has nothing to do with this file.
-			in = KeepMorphTable(0, names, values, bodies, in)
-			in = ReadMorphList("morphs", 1, names, values, bodies, in)
 		else
-			; Any other old file. Load it untagged and mark the table as old, so
-			; ResetDefaults below runs it through the upgrade an old save gets
-			; (ABM_Quest.EnsureBodyTables), which sorts a merged list by name.
-			in = ReadMorphList("morphs", 0, names, values, bodies, in)
-			tableVersion = 1
+			; A file from before 1.2.0: one list, no body tags. What it holds
+			; decides which table it replaces; the other one is KEPT, exactly as
+			; a per-body file that does not list it would leave it.
+			int oldKind = OldListKind(mainListed)
+			if oldKind == 0
+				; No UBE slider in it: a main-table file (3BA, BHUNP, custom).
+				in = ReadMorphList("morphs", 0, names, values, bodies, in)
+				in = KeepMorphTable(1, names, values, bodies, in)
+			elseif oldKind == 1
+				; Nothing but UBE sliders: the old UBE body patch's table. Marked
+				; as version 2 so the upgrade below still raises the patch's weak
+				; nipple defaults (ABM_Quest.RaiseOldUbeDefaults).
+				in = KeepMorphTable(0, names, values, bodies, in)
+				in = ReadMorphList("morphs", 1, names, values, bodies, in)
+				tableVersion = 2
+			else
+				; A hand-merged list of both. Load it untagged and mark the table
+				; as old, so ResetDefaults below runs it through the upgrade an old
+				; save gets (ABM_Quest.EnsureBodyTables), which sorts it by name.
+				in = ReadMorphList("morphs", 0, names, values, bodies, in)
+				tableVersion = 1
+			endif
 		endif
 		MainQuest.MorphNames   = names
 		MainQuest.MaxValue     = values
@@ -839,7 +879,7 @@ Int Function ReadMorphList(String listKey, Int body, String[] names, Float[] val
 	int i = 0
 	while i < listed && n < 128
 		string morphName = StringListGet(MorphFile, listKey, i)
-		if morphName != ""
+		if morphName != "" && !SlotListed(names, bodies, n, morphName, body)
 			string value = ""
 			if body == 1
 				value = GetStringValue(MorphFile, "ube_" + morphName, "")
@@ -855,6 +895,20 @@ Int Function ReadMorphList(String listKey, Int body, String[] names, Float[] val
 		i += 1
 	endwhile
 	return n
+EndFunction
+
+Bool Function SlotListed(String[] names, Int[] bodies, Int n, String morphName, Int body)
+	{True when the table being built already holds morphName for that body. A
+	 hand-edited list can repeat a name, and two slots of one morph would
+	 overwrite each other on every write.}
+	int i = 0
+	while i < n
+		if names[i] == morphName && bodies[i] == body
+			return true
+		endif
+		i += 1
+	endwhile
+	return false
 EndFunction
 
 Int Function KeepMorphTable(Int body, String[] names, Float[] values, Int[] bodies, Int n)
@@ -879,14 +933,16 @@ Int Function KeepMorphTable(Int body, String[] names, Float[] values, Int[] bodi
 	return n
 EndFunction
 
-Bool Function OldListIsUbe(Int listed)
-	{True when a pre-1.2.0 morph.json lists nothing but UBE slider names: the
-	 old UBE body patch's table, imported with that patch still installed.
-	 Recognised here, rather than left to the general upgrade, so that importing
-	 it replaces the UBE table and leaves the main one alone. Same name test as
-	 ABM_Quest.EnsureBodyTables. The file must be loaded.}
+Int Function OldListKind(Int listed)
+	{What the single list of a pre-1.2.0 morph.json holds: 0 = no UBE slider at
+	 all (a main-table file), 1 = nothing but UBE sliders (the old UBE body
+	 patch's table), 2 = both (a hand-merged list). Decided here, rather than
+	 left to the general upgrade, so that importing an old file replaces only
+	 the table it is about and leaves the other one alone. Same name test as
+	 ABM_Quest.AdoptSingleBodyTable. The file must be loaded.}
 	String[] ubeSet = MainQuest.UbeMorphSet()
 	bool anyUbeOnly = false
+	bool anyOther = false
 	int i = 0
 	while i < listed
 		string morphName = StringListGet(MorphFile, "morphs", i)
@@ -894,12 +950,17 @@ Bool Function OldListIsUbe(Int listed)
 			if MainQuest.IsUbeOnlyName(morphName, ubeSet)
 				anyUbeOnly = true
 			elseif !MainQuest.NameInSet(ubeSet, morphName)
-				return false
+				anyOther = true
 			endif
 		endif
 		i += 1
 	endwhile
-	return anyUbeOnly
+	if !anyUbeOnly
+		return 0
+	elseif !anyOther
+		return 1
+	endif
+	return 2
 EndFunction
 
 String[] Function GetIntensityPresetNames()

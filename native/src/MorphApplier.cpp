@@ -193,46 +193,41 @@ namespace ABM::MorphApplier
 
 			// Not every slot is this actor's: the table holds two bodies. A slot
 			// of the other body is NOT written as 0 -- it is simply not part of
-			// this actor's table, so the probes and the writes both skip it and
-			// it can never hold a stale value.
+			// this actor's table, so the comparison and the writes both skip it
+			// and it can never hold a stale value.
 			const std::int32_t body = BodyOf(who);
 			const auto applies = [&](const MorphEntry& morph) {
 				return morph.body == body;
 			};
 
-			// Unchanged-value skip: every slot takes one of those two factors,
-			// so ONE PROBE PER FACTOR settles whether anything would change --
-			// a single probe would miss changes confined to the other factor.
-			// Reading back what WE wrote (our key) makes SKEE the source of
+			// Unchanged-value skip: compare EVERY slot of this actor's table with
+			// what SKEE holds under our key, and leave the actor alone when all
+			// of them match. Reading back what WE wrote makes SKEE the source of
 			// truth: no parallel cache to invalidate on a push, a load, or an
 			// external clear. Skipping avoids the ApplyBodyMorphs rebuild, the
-			// real cost. Probes must have a non-zero max; a zero-max slot reads
-			// 0 for every factor and could never detect a change.
-			const MorphEntry* probeBare = nullptr;
-			const MorphEntry* probeCovered = nullptr;
+			// real cost; the reads are map lookups.
+			//
+			// Up to 1.2.1 this read one probe per factor (the first non-zero
+			// slot of each). That covers the arousal and the armor scale, but it
+			// is blind to the TABLE changing: an edit to any slider but a probe
+			// read as "already applied" until the arousal next moved, and a
+			// table zeroed out had no probe at all, which froze the actor on its
+			// old values for good. Do not narrow it back to probes.
+			const auto targetOf = [&](const MorphEntry& morph) {
+				return morph.maxValue * (suppressed(morph) ? covered : bare);
+			};
+			bool changed = false;
 			for (const auto& morph : cfg->morphs) {
-				if (morph.maxValue == 0.0f || !applies(morph)) {
+				if (!applies(morph)) {
 					continue;
 				}
-				if (suppressed(morph)) {
-					if (!probeCovered) {
-						probeCovered = &morph;
-					}
-				} else if (!probeBare) {
-					probeBare = &morph;
+				const float current = g_bodyMorph->GetMorph(who, morph.name.c_str(), NIO_KEY);
+				if (std::fabs(current - targetOf(morph)) >= 1e-6f) {
+					changed = true;
+					break;
 				}
 			}
-			if (!probeBare && !probeCovered) {
-				return;  // no slot of this actor's has a non-zero max -- nothing to write
-			}
-			const auto atTarget = [&](const MorphEntry* probe, float factor) {
-				if (!probe) {
-					return true;
-				}
-				const float current = g_bodyMorph->GetMorph(who, probe->name.c_str(), NIO_KEY);
-				return std::fabs(current - probe->maxValue * factor) < 1e-6f;
-			};
-			if (atTarget(probeBare, bare) && atTarget(probeCovered, covered)) {
+			if (!changed) {
 				if (cfg->debugMode) {
 					// Say so explicitly, so a debug session can tell "already
 					// correct" from "never ran".
@@ -247,8 +242,7 @@ namespace ABM::MorphApplier
 				if (!applies(morph)) {
 					continue;
 				}
-				const float value = morph.maxValue * (suppressed(morph) ? covered : bare);
-				g_bodyMorph->SetMorph(who, morph.name.c_str(), NIO_KEY, value);
+				g_bodyMorph->SetMorph(who, morph.name.c_str(), NIO_KEY, targetOf(morph));
 				++written;
 			}
 			g_bodyMorph->ApplyBodyMorphs(who);

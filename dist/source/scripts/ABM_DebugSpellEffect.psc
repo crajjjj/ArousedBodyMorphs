@@ -18,7 +18,7 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
 	analyzeMorphs(who)
 
 	printf("- FORCING UPDATE NOW -")
-	PlayerAlias.UpdateActor(Who, true)
+	PlayerAlias.UpdateActor(Who, true, true)
 
 	analyzeMorphs(who)
 

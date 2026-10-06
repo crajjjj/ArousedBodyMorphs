@@ -70,6 +70,19 @@ Function RefreshPlayer()
 	UpdateActor(GetPlayerRef(), false)
 EndFunction
 
+Function RefreshAfterTableEdit()
+	{MCM entry point (OnConfigClose) for a session that changed a morph VALUE: a
+	 slider, a preset, Import or Reset. Player and nearby NPCs, forced past the
+	 unchanged-value skip, which cannot see the table changing (see
+	 SetActorMorphs). Without it the edit would wait for each actor's arousal to
+	 move before it showed.}
+	If !IsActive()
+		return
+	EndIf
+	UpdateActor(GetPlayerRef(), false, true)
+	UpdateNearbyActors(false, true)
+EndFunction
+
 Event OnInit()
 	{Warm the sla_Framework cache on first fill; called for the side effect.}
 	GetFramework()
@@ -94,23 +107,33 @@ Function PushConfigToNative()
 	If !ABM_Native.IsInstalled()
 		return
 	EndIf
+	; Everything is read BEFORE the first native call. PushConfig wakes the DLL's
+	; poll thread, which queues a player update at once; with the reads done up
+	; front, the table, its flags and its body tags then land back to back, with
+	; no cross-script call between them for that update to slip into and find a
+	; table whose slots are not tagged yet.
+	Bool scopes = ABM_Native.SupportsScopes()
+	String[] names = MainQuest.MorphNames
+	Float[] values = MainQuest.MaxValue
+	Int[] flags    = MainQuest.GetMorphSuppressed()
+	Int[] bodies   = MainQuest.GetMorphBody()
 	ABM_Native.PushConfig(MainQuest.ModEnabled, MainQuest.IgnoreMales, MainQuest.IgnoreDead, MainQuest.IgnoreMaleBeast, MainQuest.IgnoreFemaleBeast, MainQuest.SuppressUnderArmor, MainQuest.UnderArmorScale, MainQuest.PollInterval, MainQuest.ScanCellRadius, MainQuest.DebugMode)
-	If !ABM_Native.SupportsScopes()
+	If !scopes
 		; A DLL from before 1.2.0 writes every slot it holds to every actor.
 		PushMainTableToNative()
 		return
 	EndIf
-	ABM_Native.PushMorphTable(MainQuest.MorphNames, MainQuest.MaxValue)
+	ABM_Native.PushMorphTable(names, values)
 	; AFTER the table, and deliberately so: suppress.json is read in one place
 	; (Papyrus) and the flags are the only thing here a pre-1.1.0 DLL can't take,
 	; so everything above has already landed if this call finds no native to
 	; bind to.
-	ABM_Native.PushSuppressFlags(MainQuest.GetMorphSuppressed())
+	ABM_Native.PushSuppressFlags(flags)
 	; The second array was 1.2.0's player-only flags. Nothing is player-only any
 	; more, so it goes over empty (None); the parameter stays because the native
 	; shipped with it and a changed signature would not bind to that DLL.
 	Int[] noPlayerOnly
-	ABM_Native.PushMorphScopes(MainQuest.GetMorphBody(), noPlayerOnly)
+	ABM_Native.PushMorphScopes(bodies, noPlayerOnly)
 EndFunction
 
 Function PushMainTableToNative()
@@ -419,8 +442,9 @@ Function ClearActorList(Actor[] theActors)
 	EndWhile
 EndFunction
 
-Function UpdateNearbyActors(Bool doDebug)
-	{Push morphs to nearby aroused NPCs, so they return with the player.}
+Function UpdateNearbyActors(Bool doDebug, Bool force = false)
+	{Push morphs to nearby aroused NPCs, so they return with the player. force
+	 is UpdateActor's.}
 	Actor[] theActors = ScanNearbyAroused(MainQuest.IgnoreDead)
 	If !theActors
 		return
@@ -430,7 +454,7 @@ Function UpdateNearbyActors(Bool doDebug)
 	While i < len
 		; Scan results can have null slots if SLA's faction-rank cache is mid-update.
 		If theActors[i]
-			UpdateActor(theActors[i], doDebug)
+			UpdateActor(theActors[i], doDebug, force)
 		EndIf
 		i += 1
 	EndWhile
@@ -665,12 +689,15 @@ Event OnArousalComputed(string eventName, string argString, float argNum, form s
 	EndIf
 endEvent
 
-Bool Function UpdateActor(Actor who, bool doDebug=false)
+Bool Function UpdateActor(Actor who, bool doDebug=false, Bool force=false)
 	{Set morphs of "who" according to their arousal.
 
 	 True when the morphs now reflect that arousal (written, or already at the
 	 target and skipped); false on every bail-out. PokePlayerArousal uses the
-	 return so the MCM row can't report a pass on a skipped actor.}
+	 return so the MCM row can't report a pass on a skipped actor.
+
+	 force writes even where the unchanged-value skip would pass. For a caller
+	 that knows the TABLE changed, which the skip cannot see: SetActorMorphs.}
 	If !who
 		; The debug spell's crosshair fallback can pass None.
 		return false
@@ -681,6 +708,11 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 	EndIf
 	If NativeActive()
 		; One native call does filters, arousal read, scaling and all writes.
+		If force && !ABM_Native.ChecksEverySlot()
+			; A DLL from before 1.2.2 has the probe-only skip as well. Dropping
+			; our key first makes its probes read 0, so it rewrites the table.
+			ABM_Native.ClearActorMorphs(who)
+		EndIf
 		Int applied = ABM_Native.UpdateActor(who)
 		If who == GetPlayerRef()
 			tweenGen += 1
@@ -757,7 +789,7 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 	EndIf
 
 	Bool isPlayer = who == GetPlayerRef()
-	SetActorMorphs(who, Arousal, armorScale, doDebug)
+	SetActorMorphs(who, Arousal, armorScale, doDebug, force)
 
 	; Track the tween's start point + the reported arousal, and cancel any
 	; in-flight tween -- a direct update supersedes it.
@@ -769,7 +801,7 @@ Bool Function UpdateActor(Actor who, bool doDebug=false)
 	return true
 EndFunction
 
-Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
+Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false, Bool force=false)
 	{Write every morph = maxValue * arousal/100, times scale for the morphs whose
 	 area group the under-armor setting covers, then push the model update.
 	 Shared by UpdateActor (a snap) and TweenPlayerReveal (one ease step).
@@ -785,9 +817,13 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 	 A single probe is no longer enough: with a mixed mask it would miss every
 	 change confined to the other factor (bare <-> covered while the probe sits
 	 in an unselected group). The probes read back what WE wrote (our key),
-	 making NiOverride the source of truth: nothing to invalidate on a slider
-	 change, a save load, or an external clear, because the target moves with the
-	 settings. DO NOT replace it with a remembered value.
+	 making NiOverride the source of truth: nothing to invalidate on a save load
+	 or an external clear. DO NOT replace it with a remembered value.
+
+	 What the probes can NOT see is the table itself changing: an edit to any
+	 slider but a probe slot leaves both probes on target. A caller that changed
+	 a morph value therefore passes force (the MCM does, through
+	 RefreshAfterTableEdit), which skips the comparison and writes.
 
 	 Not every slot is this actor's. The table holds two bodies: a UBE race takes
 	 the UBE slots, everyone else the main ones (MainQuest.BodyOf). A slot of
@@ -839,13 +875,20 @@ Function SetActorMorphs(Actor who, Int arousal, Float scale, Bool doDebug=false)
 		j += 1
 	EndWhile
 	If probeBare < 0 && probeCovered < 0
-		; No slot of this actor's has a non-zero max -- nothing can ever be
-		; written.
+		; No slot of this actor's has a non-zero max, so every target is 0. That
+		; is not "nothing to do": values written under an earlier table, before
+		; its sliders were zeroed, would stay on the actor for good, with no
+		; probe left to notice them. Drop our key instead; one call when clean.
+		If NiOverride.HasBodyMorphKey(who, NIO_KEY)
+			NiOverride.ClearBodyMorphKeys(who, NIO_KEY)
+			NiOverride.UpdateModelWeight(who)
+		EndIf
 		return
 	EndIf
 	; 1e-6: float32 noise here is ~1e-8, the smallest dialable step ~1e-4.
-	Bool changed = false
-	If probeBare >= 0 && Math.Abs(NiOverride.GetBodyMorph(who, morphNames[probeBare], NIO_KEY) - maxValues[probeBare] * bare) >= 0.000001
+	; force skips the comparison: the caller knows the table itself changed.
+	Bool changed = force
+	If !changed && probeBare >= 0 && Math.Abs(NiOverride.GetBodyMorph(who, morphNames[probeBare], NIO_KEY) - maxValues[probeBare] * bare) >= 0.000001
 		changed = true
 	EndIf
 	If !changed && probeCovered >= 0 && Math.Abs(NiOverride.GetBodyMorph(who, morphNames[probeCovered], NIO_KEY) - maxValues[probeCovered] * covered) >= 0.000001

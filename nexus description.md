@@ -19,7 +19,7 @@ The default set targets CBBE 3BA: 23 sliders covering the nipple set, areola, an
 [list]
 [*][b]Intensity presets:[/b] Minimal, Natural, Noticeable, Exaggerated. Natural is the install default.[/*]
 [*][b]Per-morph sliders[/b] grouped by area (Nipples / Areolas / Vagina / Breasts / Butt / Other), in 0.01 steps.[/*]
-[*][b]Per-actor bodies:[/b] UBE races take the built-in UBE table, everyone else the main one. Each table keeps its own values, and the MCM switches between them.[/*]
+[*][b]Per-actor bodies:[/b] UBE races take the built-in UBE table, everyone else the main one. Each table keeps its own values and has its own MCM page.[/*]
 [*][b]Breast / butt sliders built in[/b] to both tables. Off until you raise them.[/*]
 [*][b]Under-armor suppression:[/b] morphs flatten while the chest is covered so nothing clips through tops, then ease back in over about a second when the top comes off.[/*]
 [*][b]Actor filters:[/b] ignore males, dead actors, male or female creatures. NPC scan radius is adjustable, and 0 means "only me".[/*]

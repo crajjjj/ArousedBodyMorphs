@@ -72,10 +72,11 @@ int[] Property MorphBody Auto Hidden
 int Property BODY_MAIN = 0 AutoReadOnly Hidden
 int Property BODY_UBE  = 1 AutoReadOnly Hidden
 
-; Layout version of the table above. 0 on a save from before 1.2.0, which held
-; one body and no MorphBody; EnsureBodyTables upgrades those once, on load.
+; Version of the table above; EnsureBodyTables brings an older one up to date
+; once, on load. 0 = before 1.2.0 (one body, no MorphBody), 2 = per-body slots
+; (1.2.0), 3 = the UBE nipple defaults raised to a visible strength (1.2.2).
 int Property TableVersion = 0 Auto Hidden
-int Property CurrentTableVersion = 2 AutoReadOnly Hidden
+int Property CurrentTableVersion = 3 AutoReadOnly Hidden
 
 ; Install defaults = the "Natural" tier (matches IntensityPresets\Natural.json).
 ; AutoReadOnly = compiled constants, not cosave-persisted, so an updated .pex
@@ -198,13 +199,53 @@ Function ResetDefaults()
 EndFunction
 
 Function EnsureBodyTables()
-	{One-time upgrade of a table saved (or imported from a file written) before
-	 1.2.0, which held a single body and had no MorphBody. Keyed on
-	 TableVersion, so it is one compare on every later load.
+	{Bring a table from an older version up to date, one step per version, so a
+	 save can climb any number of them in one load. Keyed on TableVersion, so it
+	 is one compare on every later load.
 
 	 Lives on the load path, NOT in the MCM's OnVersionUpdate: that event fires
 	 inside SkyUI's registration pass, and reaching across to this script from
-	 there froze the game in the predecessor mod.
+	 there froze the game in the predecessor mod.}
+	If TableVersion >= CurrentTableVersion
+		return
+	EndIf
+	If !MorphNames
+		; Corrupt table. "Reset all state" rebuilds it at the current version.
+		return
+	EndIf
+	If TableVersion < 2
+		AdoptSingleBodyTable()
+	EndIf
+	If TableVersion < 3
+		RaiseOldUbeDefaults()
+	EndIf
+	TableVersion = CurrentTableVersion
+	Debug.Trace("ABM: morph table upgraded to version " + CurrentTableVersion + " (" + MorphCount() + " morphs)")
+EndFunction
+
+Function RaiseOldUbeDefaults()
+	{Version 3. 1.2.0 and 1.2.1 shipped the UBE table with NipplesPerkiness 0.8
+	 and NippleLength 0.3, numbers sized like the 3BA ones. UBE's sliders move
+	 the mesh about a third as far as 3BA's (see DefaultForMorph), so at those
+	 values the effect was all but invisible. A slot still sitting EXACTLY on an
+	 old default was never tuned, so it moves to the new one; anything the user
+	 dialled in is left alone.}
+	Int i = 0
+	While i < 128 && MorphNames[i] != ""
+		If MorphBody[i] == BODY_UBE
+			If MorphNames[i] == "NipplesPerkiness" && Math.Abs(MaxValue[i] - 0.8) < 0.0001
+				MaxValue[i] = DefaultForMorph(MorphNames[i], BODY_UBE)
+			ElseIf MorphNames[i] == "NippleLength" && Math.Abs(MaxValue[i] - 0.3) < 0.0001
+				MaxValue[i] = DefaultForMorph(MorphNames[i], BODY_UBE)
+			EndIf
+		EndIf
+		i += 1
+	EndWhile
+EndFunction
+
+Function AdoptSingleBodyTable()
+	{Version 2. A table saved (or imported from a file written) before 1.2.0
+	 held a single body and had no MorphBody; this sorts it into the two.
 
 	 Non-destructive -- every existing slot keeps its tuned value, and only its
 	 body tag is decided here:
@@ -218,13 +259,6 @@ Function EnsureBodyTables()
 	 Whatever the UBE table still lacks is then appended at UBE's defaults, and
 	 the swell entries arrive at 0 on both, so nothing changes on screen for a
 	 body that was already set up.}
-	If TableVersion >= CurrentTableVersion
-		return
-	EndIf
-	If !MorphNames
-		; Corrupt table. "Reset all state" rebuilds it at the current version.
-		return
-	EndIf
 	MorphBody = new int[128]
 	String[] ubeSet = UbeMorphSet()
 	Int count = MorphCount()
@@ -256,9 +290,6 @@ Function EnsureBodyTables()
 	count = AppendMorphSet(MainSwellSet(), BODY_MAIN, count)
 	count = AppendMorphSet(ubeSet, BODY_UBE, count)
 	AppendMorphSet(UbeSwellSet(), BODY_UBE, count)
-
-	TableVersion = CurrentTableVersion
-	Debug.Trace("ABM: morph table upgraded to per-body slots (" + MorphCount() + " morphs)")
 EndFunction
 
 Bool Function NameInSet(String[] names, String morphName)
@@ -493,11 +524,11 @@ Function EnsureSwellSlots()
 	{Append the swell entries to whichever table lacks them, at 0. For Import: a
 	 file need not list them, and they should be on the page regardless.
 
-	 Only on a table that already carries its body tags. An old-layout table
-	 (TableVersion behind) gets them from EnsureBodyTables instead, which
+	 Only on a table that already carries its body tags (version 2 up). A
+	 single-body table gets them from AdoptSingleBodyTable instead, which
 	 rebuilds the tags from the names -- appending here first would hand it two
 	 UBE-tagged slots it then has to guess about.}
-	If TableVersion < CurrentTableVersion
+	If TableVersion < 2
 		return
 	EndIf
 	Int count = AppendMorphSet(MainSwellSet(), BODY_MAIN, MorphCount())
@@ -548,12 +579,19 @@ Float Function DefaultForMorph(String morphName, Int body = 0)
 	{Per-morph defaults (Natural tier -- keep in sync with Natural.json), per
 	 BODY, since one name can default differently on each (NippleLength). Main
 	 table: nipples use the Default* properties and the genital set lists only
-	 non-zero values. Everything else, the swell entries included, is 0.}
+	 non-zero values. Everything else, the swell entries included, is 0.
+
+	 Do NOT copy a 3BA number onto the UBE slider of the same name. UBE's
+	 sliders move the mesh far less per unit (BodySlide data: NippleLength 0.40
+	 game units at 1.0 against 3BA's 1.18, NipplesPerkiness 0.27 against 0.62),
+	 so the UBE values are sized to give the SAME movement as the 3BA defaults
+	 (1.5 and 1.9, confirmed in game). 0.3 and 0.8, what 1.2.0 shipped, were
+	 all but invisible.}
 	If body == BODY_UBE
 		If morphName == "NipplesPerkiness"
-			Return 0.8
+			Return 1.9
 		ElseIf morphName == "NippleLength"
-			Return 0.3
+			Return 1.5
 		ElseIf morphName == "AreolaErection"
 			Return 0.6
 		ElseIf morphName == "ClitorisErection"

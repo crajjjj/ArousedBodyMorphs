@@ -34,7 +34,7 @@ namespace ABM::Events
 
 		// Player + every high-processed NPC within scanRadius. Actor filters
 		// live in UpdateActor, so this only bounds the sweep spatially; its
-		// unchanged-value probe then skips every bystander already at target.
+		// unchanged-value check then skips every bystander already at target.
 		// Main thread only.
 		void SweepNearby()
 		{

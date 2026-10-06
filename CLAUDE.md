@@ -49,23 +49,33 @@ Event-driven replacement for the Papyrus update pipeline; see
   Event sinks only classify + queue, and bursty sources (heartbeat, equip)
   coalesce through an `exchange(true)` pending flag.
 - **Unchanged-value skip:** both pipelines skip the morph writes + model
-  rebuild when the values are already applied. Every slot is
-  `maxValue[i] * factor` with exactly TWO factors in play - `arousal/100 *
-  armorScale` for the morphs `suppress.json` covers, and `arousal/100` for
-  the rest - so ONE PROBE PER FACTOR settles it: read the first non-zero-max
-  morph of each class back under our key (`NiOverride.GetBodyMorph` /
-  `IBodyMorphInterface::GetMorph`) and compare to its target, tolerance 1e-6.
-  A single probe was enough only while one factor covered the whole table;
-  with a mixed flag set it misses every change confined to the other factor
-  (bare <-> covered while the probe sits in an unsuppressed morph), so do not
-  collapse it back. When `armorScale == 1.0` the two factors coincide and the
-  flags are not even read.
-  **Deliberately no cache** - SKEE is the single source of truth, so nothing
-  needs invalidating on a settings push, a save load, or an external clear,
-  and the comparison targets move with the settings by construction. Do not
-  "optimize" this back into a remembered value: the probes are one or two
-  calls against 23 writes plus a mesh rebuild, and every cached variant of
+  rebuild when the values are already applied, by reading back what WE wrote
+  under our key (`NiOverride.GetBodyMorph` / `IBodyMorphInterface::GetMorph`),
+  tolerance 1e-6. **Deliberately no cache** - SKEE is the single source of
+  truth, so nothing needs invalidating on a save load or an external clear. Do
+  not "optimize" this back into a remembered value: every cached variant of
   it grew a staleness bug.
+  - **The DLL compares EVERY slot** of the actor's table (map lookups), so it
+	also sees the table itself changing. Up to 1.2.1 it read one probe per
+	factor and did not; do not narrow it back.
+  - **Papyrus keeps ONE PROBE PER FACTOR**, because 40 native calls per actor
+	per tick is not affordable there. Every slot is `maxValue[i] * factor`
+	with exactly TWO factors in play - `arousal/100 * armorScale` for the
+	morphs `suppress.json` covers, and `arousal/100` for the rest - and the
+	first non-zero-max morph of each class is read back. A single probe misses
+	every change confined to the other factor (bare <-> covered while the
+	probe sits in an unsuppressed morph), so do not collapse it. When
+	`armorScale == 1.0` the two factors coincide and the flags are not read.
+  - **The probes see arousal and armor changes, NOT an edited slider** (unless
+	it is a probe slot). So a changed morph value is FORCED: the MCM sets
+	`morphsDirty` on a slider / preset / Import / Reset and closes through
+	`RefreshAfterTableEdit` (player + nearby NPCs, `force = true`). In native
+	mode with a pre-1.2.2 DLL the force is a `ClearActorMorphs` before the
+	update (`ABM_Native.ChecksEverySlot()`). Any new path that edits
+	`MaxValue` must set that flag or force the write itself.
+  - **A table with no non-zero slot has no probe.** The Papyrus writer then
+	drops our key if the actor still holds it instead of just returning, or
+	the actor would stay frozen on the values of the earlier table.
 - **What under-armor suppression covers is DATA, not an option:**
   `suppress.json` (StorageUtilData, beside config/morph.json) holds one
   `"suppress"` string list whose entries are either an exact morph name or an
@@ -146,11 +156,22 @@ One slot array holds TWO bodies' tables, and a slot is not every actor's:
   probes and the writes alike, in both pipelines. That is what keeps the
   two-factor probe logic intact (no third "zero" class) and means such a slot
   can never hold a stale value. Do not turn the skip into a zero write.
-- **Old saves upgrade on the LOAD path**: `TableVersion` (0 before 1.2.0) and
+- **Old saves upgrade on the LOAD path**: `TableVersion` and
   `EnsureBodyTables`, called from `ResetDefaults`. NOT from the MCM's
-  `OnVersionUpdate`, which must not reach across to the quest. It retags
-  UBE-only names, treats an all-UBE table (the retired UBE patch) as the UBE
-  table, and appends what is missing. Non-destructive.
+  `OnVersionUpdate`, which must not reach across to the quest. A ladder, one
+  step per version, non-destructive: version 2 (`AdoptSingleBodyTable`)
+  retags UBE-only names, treats an all-UBE table (the retired UBE patch) as
+  the UBE table and appends what is missing; version 3 (`RaiseOldUbeDefaults`)
+  moves a UBE slot still sitting EXACTLY on a 1.2.0 default to the new one.
+  Append a step for a new version, never edit an old one.
+- **UBE values are NOT 3BA values.** UBE's sliders move the mesh about a
+  third as far per unit (BodySlide data: `NippleLength` 0.40 game units at 1.0
+  against 3BA's 1.18, `NipplesPerkiness` 0.27 against 0.62). 1.2.0 shipped
+  0.3 / 0.8, sized like 3BA's, and the effect was invisible in game. The UBE
+  defaults (1.5 / 1.9, user-confirmed in game) give the same MOVEMENT as the
+  3BA defaults, and the presets run 0.5 / 1 / 1.5 / 2 around them, capped at
+  the slider limit of 3.0. Size any new UBE default from the `.osd`, not by
+  analogy with the 3BA number.
 - **JSON keys are per slot**: `ABM_Quest.MorphKey` prefixes a UBE slot with
   `ube_`. `morph.json` has one list per table (`morphs`, `morphs_ube`) and a
   `tableversion` key; Import replaces a table the file lists and KEEPS one it
@@ -227,9 +248,9 @@ native\                          Optional SKSE DLL (xmake + CommonLibSSE-NG)
 |--------|------|
 | `ABM_Quest` | Hosts mod state: morph names, max-value sliders, defaults, flags, the per-slot body tags and the table an actor takes (`MorphBody` / `BodyOf` / `EnsureBodyTables`), area-group helpers (`GroupForMorph` / `GroupName` / `GroupKeyword` / `IsSwellGroup`) and the resolved under-armor set (`RebuildMorphTables` / `MorphSuppressed` / `UnderArmorActive`). `OnInit()` runs first-time setup. |
 | `ABM_PlayerAlias` | `ReferenceAlias` on the player. Detects NiOverride/SKEE, identifies the SLA flavor, runs `UpdateActor()` to push BodyMorph values, owns the player poll, under-armor suppression and the reveal tween. NIO key is `"ArousedBodyMorphs.esp"`. |
-| `ABM_ConfigMenu` | SkyUI MCM (two pages: General / Morphs). Morphs page shows ONE body's table at a time (`State_BodyTable` flips `bodyShown`) and groups its sliders by area (Nipples / Areolas / Vagina / Breasts / Butt / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
+| `ABM_ConfigMenu` | SkyUI MCM (three pages: General / Morphs / Morphs (UBE)). A morph page shows ONE body's table (`OnPageReset` sets `bodyShown` from the page) and groups its sliders by area (Nipples / Areolas / Vagina / Breasts / Butt / Other) via `GroupForMorph`, split across both columns at the row midpoint. JSON import/export via `JsonUtil` (`ArousedBodyMorphs/config.json`, `ArousedBodyMorphs/morph.json`). |
 | `ABM_DebugSpellEffect` | Lesser-power magic effect. Dumps actor base + morph values to the Papyrus log, forces `UpdateActor()`, dumps again. |
-| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled` and `SupportsScopes` gates + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`, `PushSuppressFlags`, `PushMorphScopes`). No form binding, so it is not in the ESP. |
+| `ABM_Native` | Global bindings for the optional native DLL (`IsInstalled`, `SupportsScopes` and `ChecksEverySlot` gates + natives: `IsActive`, `GetBackendName`, `UpdateActor`, `ClearActorMorphs`, `PushConfig`, `PushMorphTable`, `PushSuppressFlags`, `PushMorphScopes`). No form binding, so it is not in the ESP. |
 
 ### ESP records (all defined by this plugin, ESL range)
 

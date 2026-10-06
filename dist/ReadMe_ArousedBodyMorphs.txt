@@ -1,4 +1,4 @@
-Aroused BodyMorphs 1.2.1
+Aroused BodyMorphs 1.2.2
 ========================
 
 by crajjjj -- https://github.com/crajjjj/ArousedBodyMorphs
@@ -14,8 +14,8 @@ on nearby NPCs.
 The default morph set targets CBBE 3BA slider names (23 sliders: nipple set,
 areola, and the 3BA labia/vagina/clit set). UBE 2.0 is built in as a second
 table: a UBE character is recognised by its race and gets UBE's own sliders
-automatically, so UBE and 3BA characters can share one game. The MCM shows one
-table at a time ("Body table" on the Morphs page) and groups its sliders by
+automatically, so UBE and 3BA characters can share one game. Each table has
+its own MCM page (Morphs and Morphs (UBE)), with the sliders grouped by
 area (Nipples / Areolas / Vagina / Breasts / Butt / Other). Any custom morph
 list can be imported via JSON; imported morphs sort themselves into the area
 groups by name.
